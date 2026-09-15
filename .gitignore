@@ -1,0 +1,21 @@
+# Dependencias en cualquier aplicación del monorepo
+node_modules/
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Cachés, tokens y archivos temporales
+**/.cache/
+**/.tmp/
+**/tmp/
+**/msal-cache.json
+**/*.msal-cache.json
+*.log
+npm-debug.log*
+
+# Salidas comunes de herramientas
+coverage/
+dist/
+build/

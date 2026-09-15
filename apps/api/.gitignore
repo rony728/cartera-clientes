@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+# Caché de autenticación MSAL y tokens
+msal-cache.json
+*.msal-cache.json
+
+# Logs y archivos temporales
+npm-debug.log*
+*.log

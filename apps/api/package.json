@@ -1,0 +1,22 @@
+{
+  "name": "cartera-clientes-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prueba mínima de envío de correo con Microsoft Graph desde Termux",
+  "main": "src/mail.js",
+  "scripts": {
+    "test:mail": "node src/test-mail.js",
+    "start": "node src/server.js",
+    "start:api": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^5.1.5",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "isomorphic-fetch": "^3.0.0"
+  }
+}
