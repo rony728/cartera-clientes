@@ -6,7 +6,21 @@ const { sendMail } = require('./mail');
 const app = express();
 const host = process.env.HOST || '127.0.0.1';
 const port = Number.parseInt(process.env.PORT || '3005', 10);
+const apiKey = process.env.API_KEY;
 
+if (!apiKey || apiKey.trim() === '') {
+  console.error('No se puede iniciar la API: falta configurar API_KEY en .env.');
+  process.exit(1);
+}
+
+function requireApiKey(req, res, next) {
+  if (req.get('X-API-Key') !== apiKey) {
+    return res.status(401).json({ ok: false, mensaje: 'No autorizado' });
+  }
+  return next();
+}
+
+app.use('/api/cartera/celular', requireApiKey);
 app.use(express.json({ limit: '16kb' }));
 
 function validateValue(value) {
