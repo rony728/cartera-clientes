@@ -163,7 +163,7 @@ SNAPSHOT_RECORDS_PATH=
 SNAPSHOT_MAX_BYTES=10485760
 ```
 
-- `SNAPSHOT_IMPORT_ENABLED` debe permanecer en `false` hasta implementar y validar autorización administrativa real.
+- `SNAPSHOT_IMPORT_ENABLED` es `false` por defecto. Puede establecerse explícitamente en `true` para habilitar el botón administrativo; esto no inicia ninguna importación automática.
 - `SNAPSHOT_PATH` debe apuntar a una ubicación privada fuera del repositorio.
 - Si el nivel raíz del JSON es un arreglo, `SNAPSHOT_RECORDS_PATH` queda vacío. Si está anidado, configura una ruta por puntos, por ejemplo `value` o `data.items`.
 - `SNAPSHOT_MAX_BYTES` limita el tamaño leído; el valor predeterminado es 10 MiB.
@@ -174,7 +174,7 @@ El archivo se lee sin modificarlo. Se comprueban tamaño, legibilidad y estabili
 
 ### Endpoints administrativos
 
-Todos requieren sesión y rol `ADMIN`; iniciar una importación también requiere CSRF.
+Todos requieren sesión y rol `ADMIN`; iniciar una importación también requiere CSRF y `confirmar_importacion: true` en el cuerpo. Cada intento registra el administrador que lo inició.
 
 ```text
 POST /api/v1/sincronizaciones
@@ -192,14 +192,14 @@ Con la importación deshabilitada, `POST` responde HTTP 403:
 }
 ```
 
-Cuando la validación en Ubuntu y la autorización administrativa estén listas, una ejecución se solicita sin proporcionar una ruta:
+Después de validar el archivo y configurar `SNAPSHOT_IMPORT_ENABLED=true`, una ejecución se solicita sin proporcionar una ruta:
 
 ```sh
 curl -i -X POST http://127.0.0.1:3005/api/v1/sincronizaciones \
   -H 'Content-Type: application/json' \
   -b cookies.txt \
   -H 'X-CSRF-Token: TOKEN_DE_LA_SESION' \
-  -d '{}'
+  -d '{"confirmar_importacion":true}'
 ```
 
 Una importación completada devuelve sus contadores:
@@ -227,11 +227,12 @@ Las terminales ausentes se inactivan y nunca se eliminan. Si las ausencias super
 
 ```json
 {
+  "confirmar_importacion": true,
   "confirmar_inactivacion_masiva": true
 }
 ```
 
-La confirmación solo omite la barrera porcentual; no omite la validación del archivo.
+La confirmación de inactivación masiva solo omite la barrera porcentual; no sustituye `confirmar_importacion` ni omite la validación del archivo.
 
 Cada propiedad modificada se registra en `historial_cambios`, conservando la diferencia entre ausencia y `null`. Los cambios de estado usan el campo administrativo `__estado_terminal__` con origen `SISTEMA`; los cambios del snapshot usan origen `EXCEL`.
 
@@ -246,7 +247,7 @@ npm test
 npm audit --omit=dev
 ```
 
-Las pruebas usan fixtures sintéticas y dependencias PostgreSQL simuladas; no modifican producción ni envían correos. Antes de habilitar `SNAPSHOT_IMPORT_ENABLED` en Ubuntu se debe validar `SNAPSHOT_RECORDS_PATH` con el archivo real y ejecutar las pruebas de integración contra una base aislada. La resolución manual de conflictos todavía no está implementada.
+Las pruebas usan fixtures sintéticas y dependencias PostgreSQL simuladas; no modifican producción ni envían correos. Antes de habilitar `SNAPSHOT_IMPORT_ENABLED` en Ubuntu se debe validar `SNAPSHOT_RECORDS_PATH` con el archivo real y ejecutar las pruebas de integración contra una base aislada. La configuración habilita exclusivamente el endpoint manual: no hay temporizador, tarea programada ni importación al arrancar. La resolución manual de conflictos todavía no está implementada.
 
 La suite PostgreSQL real y el validador de snapshot se documentan en [../../docs/integration-testing.md](../../docs/integration-testing.md). Estas herramientas exigen una base separada, rechazan expresamente las bases de producción y no envían correo.
 

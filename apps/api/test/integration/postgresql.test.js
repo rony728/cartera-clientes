@@ -124,6 +124,30 @@ test('importación inicial persiste texto, ceros, JSONB, historial y contadores'
   assert.ok(synchronization.rows[0].fecha_fin instanceof Date);
 });
 
+test('importación inicial de 1,000 registros cabe en el esquema y registra al ADMIN', async () => {
+  const admin = await pool.query({
+    text: `INSERT INTO public.usuarios (nombre, usuario, password_hash, rol)
+      VALUES ('Admin de prueba', 'admin_importacion', 'hash-sintetico', 'ADMIN') RETURNING id`
+  });
+  const records = Array.from({ length: 1_000 }, (_, index) => ({
+    Terminal: String(index).padStart(8, '0'),
+    NombreComercial: `Comercio sintético ${index}`
+  }));
+  const result = await importer(syntheticSnapshot(records), { userId: admin.rows[0].id });
+
+  assert.equal(result.total_registros, 1_000);
+  assert.equal(result.insertados, 1_000);
+  assert.equal((await pool.query('SELECT count(*)::int AS total FROM public.terminales')).rows[0].total, 1_000);
+  assert.equal((await pool.query('SELECT count(*)::int AS total FROM public.historial_cambios')).rows[0].total, 2_000);
+  const synchronization = await pool.query(
+    'SELECT usuario_id, total_registros, insertados, estado FROM public.sincronizaciones'
+  );
+  assert.equal(String(synchronization.rows[0].usuario_id), String(admin.rows[0].id));
+  assert.equal(synchronization.rows[0].total_registros, 1_000);
+  assert.equal(synchronization.rows[0].insertados, 1_000);
+  assert.equal(synchronization.rows[0].estado, 'COMPLETADA');
+});
+
 test('sincronizaciones posteriores no duplican y registran cambios dinámicos e inactivación/reactivación', async () => {
   const initial = await importer(syntheticSnapshot([
     { Terminal: '001', Inventario: 'A', SeriePOS: 'S1', Nullable: null, ItemInternalId: 't1' },

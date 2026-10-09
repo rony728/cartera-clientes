@@ -56,6 +56,6 @@ El cliente obtiene un token en `GET /api/v1/auth/csrf`. Debe conservar la cookie
 
 Las solicitudes sin sesión reciben HTTP 401. Las sesiones sin rol suficiente reciben HTTP 403. Los errores de login no distinguen usuario inexistente, inactivo o contraseña incorrecta.
 
-El procedimiento operativo actual está en [production-security.md](production-security.md). No crea administradores, no ejecuta migraciones y mantiene `SNAPSHOT_IMPORT_ENABLED=false`.
+El procedimiento operativo actual está en [production-security.md](production-security.md). No crea administradores ni ejecuta migraciones. `SNAPSHOT_IMPORT_ENABLED` permanece en `false` por defecto y solo se activa deliberadamente para permitir una importación iniciada por un `ADMIN` con CSRF y confirmación explícita.
 
 La interfaz de login y la edición desde la PWA se documentan en `frontend-architecture.md`. La resolución manual de conflictos sigue pendiente.

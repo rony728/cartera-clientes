@@ -88,9 +88,6 @@ function loadServerConfig(env = process.env) {
     if (corsOrigins.length === 0) {
       throw new Error('CORS_ORIGINS debe contener al menos un origen HTTPS en producción.');
     }
-    if (importEnabled) {
-      throw new Error('SNAPSHOT_IMPORT_ENABLED debe permanecer false en esta etapa.');
-    }
   }
 
   return {

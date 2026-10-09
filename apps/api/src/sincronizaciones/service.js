@@ -27,13 +27,14 @@ function safeFailureCode(error) {
   return 'INTERNAL_ERROR';
 }
 
-async function recordRejectedSnapshot(pool, error, repositoryApi) {
+async function recordRejectedSnapshot(pool, error, repositoryApi, userId) {
   const counters = { ...EMPTY_COUNTERS, total_registros: error.totalRecords || 0 };
   const id = await repositoryApi.createAttempt(pool, {
     hash: error.hash,
     total: counters.total_registros,
     estado: 'RECHAZADA',
-    detail: safeFailureCode(error)
+    detail: safeFailureCode(error),
+    userId
   });
   throw new ImportError(error.code, error.message, error.statusCode, id);
 }
@@ -82,6 +83,7 @@ async function importSnapshot({
   pool,
   snapshotConfig,
   confirmMassDeactivation = false,
+  userId = null,
   readSnapshotFn = readSnapshot,
   repositoryApi = repository
 }) {
@@ -89,13 +91,16 @@ async function importSnapshot({
   try {
     snapshot = await readSnapshotFn(snapshotConfig);
   } catch (error) {
-    if (error instanceof SnapshotError) return recordRejectedSnapshot(pool, error, repositoryApi);
+    if (error instanceof SnapshotError) {
+      return recordRejectedSnapshot(pool, error, repositoryApi, userId);
+    }
     throw error;
   }
 
   const synchronizationId = await repositoryApi.createAttempt(pool, {
     hash: snapshot.hash,
-    total: snapshot.records.length
+    total: snapshot.records.length,
+    userId
   });
   let client;
   try {

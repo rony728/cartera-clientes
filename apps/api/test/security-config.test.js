@@ -38,14 +38,20 @@ test('acepta la configuración HTTPS prevista sin activar importaciones', () => 
   assert.equal(config.importEnabled, false);
 });
 
+test('permite activar explícitamente la importación manual en producción', () => {
+  const config = loadServerConfig(productionEnv({ SNAPSHOT_IMPORT_ENABLED: 'true' }));
+  assert.equal(config.importEnabled, true);
+  assert.equal(config.cookie.secure, true);
+  assert.deepEqual(config.corsOrigins, ['https://cartera.rtdev.uk']);
+});
+
 test('rechaza producción sin cookie segura, loopback, proxy exacto u origen HTTPS', () => {
   const invalid = [
     [{ COOKIE_SECURE: 'false' }, /COOKIE_SECURE/u],
     [{ HOST: '0.0.0.0' }, /HOST/u],
     [{ TRUST_PROXY: '2' }, /TRUST_PROXY/u],
     [{ CORS_ORIGINS: '' }, /CORS_ORIGINS/u],
-    [{ CORS_ORIGINS: 'http://cartera.rtdev.uk' }, /HTTPS/u],
-    [{ SNAPSHOT_IMPORT_ENABLED: 'true' }, /SNAPSHOT_IMPORT_ENABLED/u]
+    [{ CORS_ORIGINS: 'http://cartera.rtdev.uk' }, /HTTPS/u]
   ];
   for (const [override, expected] of invalid) {
     assert.throws(() => loadServerConfig(productionEnv(override)), expected);
@@ -58,6 +64,7 @@ test('rechaza secretos inseguros, booleanos ambiguos y nombres de cookie inváli
     [{ SESSION_SECRET: 'CAMBIAR_POR_UN_SECRETO_ALEATORIO_DE_AL_MENOS_32_CARACTERES' }, /SESSION_SECRET/u],
     [{ API_KEY: 'CAMBIAR_POR_UNA_CLAVE_SEGURA' }, /API_KEY/u],
     [{ COOKIE_SECURE: 'yes' }, /COOKIE_SECURE/u],
+    [{ SNAPSHOT_IMPORT_ENABLED: 'yes' }, /SNAPSHOT_IMPORT_ENABLED/u],
     [{ SESSION_COOKIE_NAME: 'cookie inválida' }, /SESSION_COOKIE_NAME/u]
   ];
   for (const [override, expected] of invalid) {

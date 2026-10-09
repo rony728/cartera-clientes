@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, searchParams, setCsrfToken } from '../api';
+import { api, importSnapshot, searchParams, setCsrfToken } from '../api';
 
 afterEach(() => vi.restoreAllMocks());
 describe('cliente API seguro', () => {
@@ -15,6 +15,22 @@ describe('cliente API seguro', () => {
     await api('/cambio', { method: 'PATCH', body: '{}' });
     const options = vi.mocked(fetch).mock.calls[0][1]!;
     expect(new Headers(options.headers).get('X-CSRF-Token')).toBe('token-memoria');
+  });
+  it('confirma explícitamente la importación manual desde el Dashboard', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ ok: true, sincronizacion: { id: 1, estado: 'COMPLETADA', total_registros: 1_000 } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    ));
+    setCsrfToken('token-importacion');
+    await importSnapshot(true);
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toContain('/api/v1/sincronizaciones');
+    expect(options?.method).toBe('POST');
+    expect(JSON.parse(String(options?.body))).toEqual({
+      confirmar_importacion: true,
+      confirmar_inactivacion_masiva: true
+    });
+    expect(new Headers(options?.headers).get('X-CSRF-Token')).toBe('token-importacion');
   });
   it('serializa búsqueda, filtros, orden y paginación', () => {
     const params=searchParams({q:'norte',campo:'Ciudad',pagina:3,limite:20,estado:'activas',orden:'Terminal',direccion:'desc',filtros:{Zona:'Norte',Ciudad:''}});

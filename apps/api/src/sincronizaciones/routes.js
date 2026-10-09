@@ -45,6 +45,13 @@ function createSynchronizationsRouter({
         mensaje: 'La importación manual está deshabilitada en este servidor.'
       });
     }
+    if (req.body?.confirmar_importacion !== true) {
+      return res.status(400).json({
+        ok: false,
+        codigo: 'IMPORT_CONFIRMATION_REQUIRED',
+        mensaje: 'Se requiere confirmación administrativa explícita para importar el snapshot.'
+      });
+    }
     const confirmation = req.body?.confirmar_inactivacion_masiva;
     if (confirmation !== undefined && typeof confirmation !== 'boolean') {
       return res.status(400).json({
@@ -58,7 +65,8 @@ function createSynchronizationsRouter({
       const result = await importService({
         pool,
         snapshotConfig,
-        confirmMassDeactivation: confirmation === true
+        confirmMassDeactivation: confirmation === true,
+        userId: req.user.id
       });
       return res.status(200).json({ ok: true, sincronizacion: result });
     } catch (error) {

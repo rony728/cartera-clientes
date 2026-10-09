@@ -69,6 +69,12 @@ Toda futura operación de edición de terminales deberá incorporarse detrás de
 
 No se deben almacenar contraseñas, API keys, tokens CSRF ni identificadores de sesión en `localStorage` o IndexedDB. El token CSRF puede mantenerse únicamente en memoria durante la sesión de la PWA.
 
+## Importación manual del snapshot
+
+`SNAPSHOT_IMPORT_ENABLED=false` es el valor predeterminado. Tras validar el snapshot de solo lectura y las pruebas contra la base aislada, puede cambiarse deliberadamente a `true` en el `.env` de Ubuntu. Esta opción solo habilita `POST /api/v1/sincronizaciones`: no lee el archivo al arrancar ni programa sincronizaciones.
+
+El POST exige sesión activa, rol `ADMIN`, token CSRF y `confirmar_importacion: true`. El Dashboard solicita esa confirmación al administrador. Si el snapshot omite más del 10% de las terminales activas, el servidor rechaza el primer intento y exige además `confirmar_inactivacion_masiva: true`. El archivo siempre se toma de `SNAPSHOT_PATH`; la solicitud no puede elegir otra ruta.
+
 ## Validación y despliegue con PM2
 
 Ejecuta el bloque completo desde una sesión del usuario propietario del despliegue. Se detiene si el árbol tiene cambios locales. No ejecuta migraciones ni toca Cloudflare:
@@ -131,5 +137,5 @@ git pull --ff-only origin main
 - Confirmar que `https://cartera.rtdev.uk` sea el origen definitivo antes de desplegar la PWA.
 - Comprobar desde el navegador la cadena Cloudflare → túnel → Express y los atributos reales de la cookie.
 - Mantener el puerto 3005 cerrado externamente; `TRUST_PROXY=1` deja de ser apropiado si se agrega otro salto.
-- Mantener `SNAPSHOT_IMPORT_ENABLED=false` hasta una autorización posterior.
+- Mantener `SNAPSHOT_IMPORT_ENABLED=false` salvo durante el uso deliberado de la importación manual administrativa.
 - Proteger `.env`, el caché MSAL y el archivo de rollback mediante permisos del sistema.

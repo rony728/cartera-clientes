@@ -31,6 +31,16 @@ export async function login(usuario: string, password: string) {
 }
 export const logout = () => api('/api/v1/auth/logout', { method: 'POST' });
 
+export function importSnapshot(confirmMassDeactivation = false) {
+  return api('/api/v1/sincronizaciones', {
+    method: 'POST',
+    body: JSON.stringify({
+      confirmar_importacion: true,
+      ...(confirmMassDeactivation ? { confirmar_inactivacion_masiva: true } : {})
+    })
+  });
+}
+
 export function searchParams(state: SearchState) {
   const params = new URLSearchParams({ campo: state.campo, pagina: String(state.pagina), limite: String(state.limite), estado: state.estado, orden: state.orden, direccion: state.direccion });
   if (state.q) params.set('q', state.q);

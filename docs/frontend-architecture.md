@@ -38,6 +38,8 @@ ZXing se carga bajo demanda, funciona desde recursos instalados y procesa video 
 
 Se reutilizan autenticación, usuarios, terminales y sincronizaciones existentes. No hay migraciones nuevas.
 
+El Dashboard muestra la importación solo a `ADMIN`. Solicita confirmación antes del POST, envía `confirmar_importacion: true` con el token CSRF en memoria y, si el servidor detecta más del 10% de ausencias, exige una segunda confirmación antes de reenviar `confirmar_inactivacion_masiva: true`.
+
 El endpoint de filtros devuelve `datos` con valores distintos autorizados y `campos` con nombres JSONB descubiertos. Esto permite buscar y seleccionar columnas nuevas sin codificarlas en el frontend; los usuarios normales solo derivan metadatos de terminales activas.
 
 ## Limitaciones verificables

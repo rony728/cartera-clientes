@@ -1,14 +1,20 @@
 const UNRESOLVED_QUEUE_STATES = ['PENDIENTE', 'ENVIADO', 'ERROR', 'CONFLICTO', 'INCIERTO'];
 
-async function createAttempt(pool, { hash = null, total = 0, estado = 'EN_PROCESO', detail = null }) {
+async function createAttempt(pool, {
+  hash = null,
+  total = 0,
+  estado = 'EN_PROCESO',
+  detail = null,
+  userId = null
+}) {
   const result = await pool.query({
     text: `
       INSERT INTO public.sincronizaciones
-        (archivo_hash, total_registros, estado, detalle_error, fecha_fin)
-      VALUES ($1, $2, $3, $4, CASE WHEN $3 = 'EN_PROCESO' THEN NULL ELSE now() END)
+        (archivo_hash, total_registros, estado, detalle_error, fecha_fin, usuario_id)
+      VALUES ($1, $2, $3, $4, CASE WHEN $3 = 'EN_PROCESO' THEN NULL ELSE now() END, $5)
       RETURNING id
     `,
-    values: [hash, total, estado, detail]
+    values: [hash, total, estado, detail, userId]
   });
   return result.rows[0].id;
 }

@@ -81,7 +81,7 @@ Resultado esperado para el snapshot confirmado actualmente: arreglo raíz, 1,000
 
 ## Precauciones
 
-- Mantén `SNAPSHOT_IMPORT_ENABLED=false` durante esta etapa.
+- Mantén `SNAPSHOT_IMPORT_ENABLED=false` durante validaciones y pruebas. En producción solo debe cambiarse deliberadamente a `true` cuando el administrador vaya a usar la importación manual.
 - No uses el usuario, contraseña ni URL de producción.
 - No ejecutes el preparador sobre una base con esquema ya instalado: las migraciones no son un sistema de migración repetible.
 - La validación del snapshot no equivale a una importación y no comprueba datos contra producción.

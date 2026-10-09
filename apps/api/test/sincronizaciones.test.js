@@ -90,6 +90,18 @@ test('planifica una importación inicial atómica con historial', () => {
   assert.equal(plan.history.some((entry) => entry.campo === 'NombreComercial'), true);
 });
 
+test('planifica 1,000 registros iniciales compatibles con el esquema dinámico', () => {
+  const records = Array.from({ length: 1_000 }, (_, index) => normalized(
+    String(index).padStart(8, '0'),
+    { NombreComercial: `Comercio ${index}`, CampoDinamico: index }
+  ));
+  const plan = buildPlan([], records);
+  assert.equal(plan.counters.total_registros, 1_000);
+  assert.equal(plan.counters.insertados, 1_000);
+  assert.equal(plan.actions.length, 1_000);
+  assert.equal(plan.actions.every((action) => action.type === 'insert'), true);
+});
+
 test('una segunda importación idéntica no duplica cambios', () => {
   const plan = buildPlan([normalized('001', { NombreComercial: 'A' })], [normalized('001', { NombreComercial: 'A' })]);
   assert.equal(plan.counters.sin_cambios, 1);
@@ -320,7 +332,7 @@ test('expone historial paginado y detalle de sincronización protegidos', async 
   assert.equal(detail.body.id, '7');
 });
 
-test('el endpoint habilitado inicia solo la ruta configurada del servidor', async () => {
+test('el endpoint habilitado exige confirmación y usa solo la ruta configurada del servidor', async () => {
   let received;
   const app = createApp({
     apiKey: 'test-key',
@@ -335,15 +347,28 @@ test('el endpoint habilitado inicia solo la ruta configurada del servidor', asyn
     },
     ...baseAppOptions()
   });
+  const missingConfirmation = await request(app, {
+    method: 'POST',
+    path: '/api/v1/sincronizaciones',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'test-csrf-token' },
+    body: {}
+  });
+  assert.equal(missingConfirmation.status, 400);
+  assert.equal(missingConfirmation.body.codigo, 'IMPORT_CONFIRMATION_REQUIRED');
   const response = await request(app, {
     method: 'POST',
     path: '/api/v1/sincronizaciones',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'test-csrf-token' },
-    body: { confirmar_inactivacion_masiva: true, ruta: '/ruta-del-cliente' }
+    body: {
+      confirmar_importacion: true,
+      confirmar_inactivacion_masiva: true,
+      ruta: '/ruta-del-cliente'
+    }
   });
   assert.equal(response.status, 200);
   assert.equal(received.snapshotConfig.filePath, '/ruta-configurada/snapshot.json');
   assert.equal(received.confirmMassDeactivation, true);
+  assert.equal(received.userId, '1');
 });
 
 test('valida límite de tamaño y archivo inexistente', async () => {
