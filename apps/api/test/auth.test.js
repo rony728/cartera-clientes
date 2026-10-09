@@ -63,7 +63,7 @@ function fakeUsers(overrides = {}) {
   };
 }
 
-function authApp({ users = fakeUsers(), cookie = {}, corsMiddleware, loginLimits } = {}) {
+function authApp({ users = fakeUsers(), cookie = {}, corsMiddleware, loginLimits, trustProxy = 1 } = {}) {
   const sessionMiddleware = session({
     secret: 'test-session-secret-with-at-least-32-characters',
     resave: false,
@@ -78,6 +78,7 @@ function authApp({ users = fakeUsers(), cookie = {}, corsMiddleware, loginLimits
     sessionMiddleware,
     users,
     corsMiddleware,
+    trustProxy,
     loginLimits: loginLimits || { maxAttempts: 3, windowSeconds: 900, blockSeconds: 900 }
   });
 }
@@ -97,6 +98,8 @@ test('login correcto crea cookie HttpOnly, regenera sesión y permite /auth/me',
   });
   assert.equal(login.status, 200);
   assert.equal(login.headers['set-cookie'][0].includes('HttpOnly'), true);
+  assert.match(login.headers['set-cookie'][0], /SameSite=Lax/);
+  assert.doesNotMatch(login.headers['set-cookie'][0], /Domain=/);
   assert.notEqual(cookieFrom(login), initial.cookie);
   assert.equal('password_hash' in login.body.usuario, false);
   const me = await request(app, { path: '/api/v1/auth/me', headers: { Cookie: cookieFrom(login) } });
@@ -140,9 +143,32 @@ test('limita intentos de autenticación', async () => {
 
 test('cookie Secure funciona detrás de proxy HTTPS', async () => {
   const app = authApp({ cookie: { secure: true, sameSite: 'none' } });
+  const direct = await csrfSession(app);
+  assert.equal(direct.response.headers['set-cookie'], undefined);
   const csrf = await csrfSession(app, { 'X-Forwarded-Proto': 'https' });
   assert.match(csrf.response.headers['set-cookie'][0], /Secure/);
   assert.match(csrf.response.headers['set-cookie'][0], /SameSite=None/);
+  const login = await request(app, {
+    method: 'POST', path: '/api/v1/auth/login',
+    headers: {
+      Cookie: csrf.cookie,
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrf.token,
+      'X-Forwarded-Proto': 'https'
+    },
+    body: { usuario: 'admin', password: 'Contraseña-Segura-123!' }
+  });
+  assert.equal(login.status, 200);
+  assert.match(login.headers['set-cookie'][0], /HttpOnly/);
+  assert.match(login.headers['set-cookie'][0], /Secure/);
+  assert.notEqual(cookieFrom(login), csrf.cookie);
+});
+
+test('cookies admiten SameSite Strict', async () => {
+  const app = authApp({ cookie: { sameSite: 'strict' } });
+  const csrf = await csrfSession(app);
+  assert.match(csrf.response.headers['set-cookie'][0], /HttpOnly/);
+  assert.match(csrf.response.headers['set-cookie'][0], /SameSite=Strict/);
 });
 
 test('logout requiere CSRF, destruye sesión y /auth/me rechaza sesión ausente', async () => {
@@ -163,6 +189,44 @@ test('logout requiere CSRF, destruye sesión y /auth/me rechaza sesión ausente'
   assert.equal((await request(app, { path: '/api/v1/auth/me', headers: { Cookie: cookie } })).status, 401);
 });
 
+test('login y todas las operaciones administrativas mutables exigen CSRF', async () => {
+  const app = authApp();
+  const login = await request(app, {
+    method: 'POST', path: '/api/v1/auth/login',
+    headers: { 'Content-Type': 'application/json' },
+    body: { usuario: 'admin', password: 'Contraseña-Segura-123!' }
+  });
+  assert.equal(login.status, 403);
+
+  const initial = await csrfSession(app);
+  const authenticated = await request(app, {
+    method: 'POST', path: '/api/v1/auth/login',
+    headers: {
+      Cookie: initial.cookie,
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': initial.token
+    },
+    body: { usuario: 'admin', password: 'Contraseña-Segura-123!' }
+  });
+  const cookie = cookieFrom(authenticated);
+
+  const protectedRequests = [
+    { method: 'POST', path: '/api/v1/usuarios', body: {} },
+    { method: 'PATCH', path: '/api/v1/usuarios/2', body: {} },
+    { method: 'PATCH', path: '/api/v1/usuarios/2/estado', body: {} },
+    { method: 'POST', path: '/api/v1/usuarios/2/password', body: {} },
+    { method: 'POST', path: '/api/v1/sincronizaciones', body: {} }
+  ];
+  for (const item of protectedRequests) {
+    const response = await request(app, {
+      ...item,
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' }
+    });
+    assert.equal(response.status, 403, `${item.method} ${item.path}`);
+    assert.equal(response.body.mensaje, 'CSRF inválido');
+  }
+});
+
 test('una sesión expirada no autentica al usuario', async () => {
   const app = authApp({ cookie: { maxAge: 30 } });
   const initial = await csrfSession(app);
@@ -176,13 +240,36 @@ test('una sesión expirada no autentica al usuario', async () => {
   assert.equal(response.status, 401);
 });
 
-test('CORS permite solo orígenes configurados y nunca usa wildcard', async () => {
-  const app = authApp({ corsMiddleware: createCorsMiddleware(['https://pwa.example.com']) });
-  const allowed = await request(app, { path: '/api/v1/auth/csrf', headers: { Origin: 'https://pwa.example.com' } });
-  assert.equal(allowed.headers['access-control-allow-origin'], 'https://pwa.example.com');
+test('CORS permite el origen previsto, rechaza desconocidos y admite solicitudes internas', async () => {
+  const app = authApp({ corsMiddleware: createCorsMiddleware(['https://cartera.rtdev.uk']) });
+  const allowed = await request(app, { path: '/api/v1/auth/csrf', headers: { Origin: 'https://cartera.rtdev.uk' } });
+  assert.equal(allowed.headers['access-control-allow-origin'], 'https://cartera.rtdev.uk');
   assert.equal(allowed.headers['access-control-allow-credentials'], 'true');
   const denied = await request(app, { path: '/api/v1/auth/csrf', headers: { Origin: 'https://evil.example' } });
   assert.equal(denied.status, 403);
+  assert.equal(denied.headers['access-control-allow-origin'], undefined);
+  const internal = await request(app, { path: '/api/v1/auth/csrf' });
+  assert.equal(internal.status, 200);
+  assert.equal(internal.headers['access-control-allow-origin'], undefined);
+});
+
+test('preflight CORS permite solo métodos y encabezados necesarios', async () => {
+  const app = authApp({ corsMiddleware: createCorsMiddleware(['https://cartera.rtdev.uk']) });
+  const response = await request(app, {
+    method: 'OPTIONS',
+    path: '/api/v1/usuarios',
+    headers: {
+      Origin: 'https://cartera.rtdev.uk',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'Content-Type,X-CSRF-Token'
+    }
+  });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers['access-control-allow-origin'], 'https://cartera.rtdev.uk');
+  assert.equal(response.headers['access-control-allow-credentials'], 'true');
+  assert.match(response.headers['access-control-allow-methods'], /GET,POST,PATCH,OPTIONS/);
+  assert.equal(response.headers['access-control-allow-headers'], 'Content-Type,X-CSRF-Token,X-API-Key');
+  assert.equal(response.headers['access-control-max-age'], '600');
 });
 
 test('las sesiones de producción usan almacenamiento PostgreSQL', () => {

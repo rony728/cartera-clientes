@@ -37,7 +37,6 @@ function createSessionMiddleware({
     resave: false,
     saveUninitialized: false,
     rolling: true,
-    proxy: true,
     cookie: {
       httpOnly: true,
       secure,

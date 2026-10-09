@@ -25,7 +25,7 @@ function createApp({
   authorization,
   cookieName = 'cartera.sid',
   loginLimits = { maxAttempts: 5, windowSeconds: 900, blockSeconds: 900 },
-  trustProxy = 1
+  trustProxy = false
 } = {}) {
   if (!apiKey || apiKey.trim() === '') {
     throw new Error('Falta configurar API_KEY en .env.');

@@ -300,3 +300,5 @@ curl -i -b cookies.txt \
 `X-API-Key` queda exclusivamente para `/api/v1/health` y `POST /api/cartera/celular`. No concede una sesión, rol ADMIN ni acceso a importaciones.
 
 La configuración completa, migración y creación inicial del administrador se describen en [../../docs/authentication.md](../../docs/authentication.md).
+
+La configuración HTTPS para el túnel existente, CORS, validación previa, despliegue PM2 y rollback se documentan en [../../docs/production-security.md](../../docs/production-security.md).
