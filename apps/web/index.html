@@ -6,6 +6,14 @@
     <meta name="theme-color" content="#a71930" />
     <meta name="description" content="Consulta y gestión de cartera de comercios" />
     <title>Cartera de Clientes</title>
+    <script>
+      (() => {
+        const route = new URLSearchParams(window.location.search).get('__spa_route');
+        if (route && route.startsWith('/') && !route.startsWith('//') && route.length <= 4096) {
+          window.history.replaceState(null, '', route);
+        }
+      })();
+    </script>
   </head>
   <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
 </html>

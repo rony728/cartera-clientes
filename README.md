@@ -23,4 +23,4 @@ cp .env.example .env
 npm run dev
 ```
 
-La guía del frontend está en [apps/web/README.md](apps/web/README.md) y sus decisiones técnicas en [docs/frontend-architecture.md](docs/frontend-architecture.md). Ningún `.env`, token, contraseña o API key debe incorporarse al repositorio ni al bundle web.
+La guía del frontend está en [apps/web/README.md](apps/web/README.md), sus decisiones técnicas en [docs/frontend-architecture.md](docs/frontend-architecture.md) y el despliegue automático en [docs/github-pages.md](docs/github-pages.md). Ningún `.env`, token, contraseña o API key debe incorporarse al repositorio ni al bundle web.

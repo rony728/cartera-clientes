@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Abriendo Cartera de Clientes…</title>
+  </head>
+  <body>
+    <p>Abriendo Cartera de Clientes…</p>
+    <script>
+      (() => {
+        const route = window.location.pathname + window.location.search + window.location.hash;
+        window.location.replace('/?__spa_route=' + encodeURIComponent(route));
+      })();
+    </script>
+  </body>
+</html>

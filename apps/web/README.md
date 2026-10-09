@@ -16,7 +16,7 @@ npm run build
 
 `VITE_API_URL` es la única URL pública requerida. En desarrollo usa `http://127.0.0.1:3005`; el build de Ubuntu debe usar `https://api-cartera.rtdev.uk`. Las variables `VITE_*` son públicas: nunca deben contener claves o secretos.
 
-## Build y despliegue Ubuntu
+## Build y despliegue
 
 ```sh
 cd apps/web
@@ -24,7 +24,7 @@ npm ci
 VITE_API_URL=https://api-cartera.rtdev.uk npm run build
 ```
 
-Publica `dist/` mediante un servidor estático HTTPS en `https://cartera.rtdev.uk`. Debe responder `index.html` para rutas SPA desconocidas. Sirve `index.html`, `manifest.webmanifest` y `sw.js` con revalidación; los archivos con hash de `assets/` pueden ser inmutables. No se modifica Cloudflare ni producción desde este repositorio.
+El frontend se publica automáticamente en GitHub Pages desde `main`. La configuración del workflow, dominio, DNS y fallback de rutas está en [../../docs/github-pages.md](../../docs/github-pages.md). La API y PostgreSQL continúan en Ubuntu.
 
 ## Prueba manual mínima
 
