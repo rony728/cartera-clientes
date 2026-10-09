@@ -5,6 +5,7 @@ const test = require('node:test');
 const { createApp } = require('../src/app');
 const { buildSearchQuery, findTerminal } = require('../src/terminales/queries');
 const { parseSearchParams, ValidationError } = require('../src/terminales/validation');
+const { baseAppOptions, testSessionMiddleware } = require('./test-app-options');
 
 const terminalRow = {
   terminal: '000123',
@@ -66,7 +67,8 @@ function appWithPool(pool = fakePool(), options = {}) {
       apiKey: 'test-api-key',
       databasePool: pool,
       checkDatabaseFn: options.checkDatabaseFn || (async () => {}),
-      sendMailFn: options.sendMailFn || (async () => {})
+      sendMailFn: options.sendMailFn || (async () => {}),
+      ...baseAppOptions(options.role || 'ADMIN')
     }),
     pool
   };
@@ -171,18 +173,23 @@ test('los valores de búsqueda son parámetros, no SQL ejecutable', () => {
   assert.doesNotMatch(query.text, /OR 1=1/);
 });
 
-test('rechaza solicitudes sin API key o con una clave incorrecta', async () => {
-  const { app } = appWithPool();
-  const missing = await request(app, { path: '/api/v1/terminales' });
-  const incorrect = await request(app, {
-    path: '/api/v1/terminales',
-    headers: { 'X-API-Key': 'incorrecta' }
+test('rechaza consultas de terminales sin sesión', async () => {
+  const app = createApp({
+    apiKey: 'test-api-key',
+    databasePool: fakePool(),
+    checkDatabaseFn: async () => {},
+    sendMailFn: async () => {},
+    sessionMiddleware: testSessionMiddleware,
+    authorization: {
+      requireAuth(_req, res) { return res.status(401).json({ ok: false }); },
+      requireAdmin(_req, res) { return res.status(403).json({ ok: false }); }
+    }
   });
+  const missing = await request(app, { path: '/api/v1/terminales' });
   assert.equal(missing.status, 401);
-  assert.equal(incorrect.status, 401);
 });
 
-test('permite la consulta protegida con la API key correcta', async () => {
+test('permite la consulta con sesión válida', async () => {
   const { app } = appWithPool();
   const response = await request(app, {
     path: '/api/v1/terminales/000123',

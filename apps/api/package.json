@@ -2,11 +2,12 @@
   "name": "cartera-clientes-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Prueba mínima de envío de correo con Microsoft Graph desde Termux",
+  "description": "API de cartera de clientes con PostgreSQL, sesiones y Microsoft Graph",
   "main": "src/mail.js",
   "scripts": {
-    "test": "node --test test/terminales.test.js test/sincronizaciones.test.js",
+    "test": "node --test test/terminales.test.js test/sincronizaciones.test.js test/auth.test.js",
     "test:mail": "node src/test-mail.js",
+    "admin:init": "node src/scripts/create-first-admin.js",
     "start": "node src/server.js",
     "start:api": "node src/server.js"
   },
@@ -16,8 +17,12 @@
   "dependencies": {
     "@azure/msal-node": "^5.1.5",
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "argon2": "^0.45.1",
+    "connect-pg-simple": "^10.0.0",
+    "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
+    "express-session": "^1.19.0",
     "isomorphic-fetch": "^3.0.0",
     "pg": "^8.16.3"
   }

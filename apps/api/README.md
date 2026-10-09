@@ -246,3 +246,55 @@ npm audit --omit=dev
 ```
 
 Las pruebas usan fixtures sintéticas y dependencias PostgreSQL simuladas; no modifican producción ni envían correos. Antes de habilitar `SNAPSHOT_IMPORT_ENABLED` en Ubuntu se debe validar `SNAPSHOT_RECORDS_PATH` con el archivo real, ejecutar las pruebas de integración contra una base aislada y completar autenticación administrativa. La resolución manual de conflictos todavía no está implementada.
+
+## Autenticación y autorización
+
+La PWA utilizará una sesión opaca almacenada en PostgreSQL y una cookie `HttpOnly`; no debe almacenar credenciales, sesiones ni API keys en `localStorage` o IndexedDB. Las contraseñas se procesan con Argon2id.
+
+Roles:
+
+- `USUARIO`: consulta terminales activas y detalles activos.
+- `ADMIN`: además administra usuarios, consulta terminales inactivas e historial de sincronizaciones e inicia importaciones cuando estén habilitadas.
+
+La API consulta el estado y rol actuales del usuario en PostgreSQL en cada solicitud protegida. Desactivar un usuario o restablecer su contraseña elimina sus sesiones persistentes.
+
+Endpoints:
+
+```text
+GET   /api/v1/auth/csrf
+POST  /api/v1/auth/login
+POST  /api/v1/auth/logout
+GET   /api/v1/auth/me
+
+GET   /api/v1/usuarios
+POST  /api/v1/usuarios
+PATCH /api/v1/usuarios/:id
+PATCH /api/v1/usuarios/:id/estado
+POST  /api/v1/usuarios/:id/password
+```
+
+Las operaciones que modifican datos requieren el encabezado `X-CSRF-Token`, ligado a la sesión. Primero solicita `/api/v1/auth/csrf`, conservando la cookie; después envía el token recibido en login. El login regenera el identificador de sesión y devuelve un token CSRF nuevo.
+
+Ejemplo con `curl` y `jq`:
+
+```sh
+CSRF_TOKEN=$(curl -sS -c cookies.txt http://127.0.0.1:3005/api/v1/auth/csrf | jq -r .csrf_token)
+
+curl -i -b cookies.txt -c cookies.txt \
+  -X POST http://127.0.0.1:3005/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -d '{"usuario":"miusuario","password":"MI_CONTRASEÑA"}'
+```
+
+Para logout utiliza la cookie vigente y el `csrf_token` devuelto por login:
+
+```sh
+curl -i -b cookies.txt \
+  -X POST http://127.0.0.1:3005/api/v1/auth/logout \
+  -H "X-CSRF-Token: $CSRF_TOKEN_DE_LOGIN"
+```
+
+`X-API-Key` queda exclusivamente para `/api/v1/health` y `POST /api/cartera/celular`. No concede una sesión, rol ADMIN ni acceso a importaciones.
+
+La configuración completa, migración y creación inicial del administrador se describen en [../../docs/authentication.md](../../docs/authentication.md).

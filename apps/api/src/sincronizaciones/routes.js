@@ -32,11 +32,12 @@ function createSynchronizationsRouter({
   importEnabled = false,
   snapshotConfig,
   importService = importSnapshot,
-  repositoryApi = repository
+  repositoryApi = repository,
+  csrfProtection
 }) {
   const router = express.Router();
 
-  router.post('/', async (req, res) => {
+  router.post('/', csrfProtection, async (req, res) => {
     if (!importEnabled) {
       return res.status(403).json({
         ok: false,

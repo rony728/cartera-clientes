@@ -17,6 +17,9 @@ function createTerminalesRouter({ pool }) {
   router.get('/', async (req, res) => {
     try {
       const filters = parseSearchParams(req.query);
+      if (req.user.rol !== 'ADMIN' && filters.estado !== 'activas') {
+        return res.status(403).json({ ok: false, mensaje: 'Acceso denegado' });
+      }
       const result = await searchTerminales(pool, filters);
       return res.status(200).json({
         datos: result.datos,
@@ -38,6 +41,9 @@ function createTerminalesRouter({ pool }) {
       const result = await findTerminal(pool, terminal);
       if (result === null) {
         return res.status(404).json({ ok: false, mensaje: 'Terminal no encontrada.' });
+      }
+      if (!result.activa && req.user.rol !== 'ADMIN') {
+        return res.status(403).json({ ok: false, mensaje: 'Acceso denegado' });
       }
       return res.status(200).json(result);
     } catch (error) {

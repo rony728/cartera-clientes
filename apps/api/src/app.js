@@ -1,9 +1,14 @@
 const express = require('express');
+const authRepository = require('./auth/repository');
+const { createAuthRouter } = require('./auth/routes');
+const { createAuthorization } = require('./auth/authorization');
+const { csrfProtection } = require('./auth/csrf');
 const { sendMail } = require('./mail');
 const { checkDatabase, pool: defaultPool } = require('./database');
 const { createApiKeyMiddleware } = require('./middleware/api-key');
 const { createSynchronizationsRouter } = require('./sincronizaciones/routes');
 const { createTerminalesRouter } = require('./terminales/routes');
+const { createUsersRouter } = require('./usuarios/routes');
 
 function createApp({
   apiKey,
@@ -13,15 +18,29 @@ function createApp({
   importEnabled = false,
   snapshotConfig = {},
   importService,
-  synchronizationRepository
+  synchronizationRepository,
+  sessionMiddleware,
+  corsMiddleware = (_req, _res, next) => next(),
+  users = authRepository,
+  authorization,
+  cookieName = 'cartera.sid',
+  loginLimits = { maxAttempts: 5, windowSeconds: 900, blockSeconds: 900 },
+  trustProxy = 1
 } = {}) {
   if (!apiKey || apiKey.trim() === '') {
     throw new Error('Falta configurar API_KEY en .env.');
   }
+  if (typeof sessionMiddleware !== 'function') {
+    throw new Error('Falta configurar el middleware de sesiones persistentes.');
+  }
 
   const app = express();
   const requireApiKey = createApiKeyMiddleware(apiKey);
+  const access = authorization || createAuthorization({ pool: databasePool, users });
 
+  app.set('trust proxy', trustProxy);
+  app.use(corsMiddleware);
+  app.use(sessionMiddleware);
   app.use('/api/cartera/celular', requireApiKey);
   app.use(express.json({ limit: '16kb' }));
   app.get('/api/v1/health', requireApiKey, async (req, res) => {
@@ -33,13 +52,26 @@ function createApp({
       return res.status(503).json({ status: 'error', database: 'unavailable' });
     }
   });
-  app.use('/api/v1/terminales', requireApiKey, createTerminalesRouter({ pool: databasePool }));
-  app.use('/api/v1/sincronizaciones', requireApiKey, createSynchronizationsRouter({
+  app.use('/api/v1/auth', createAuthRouter({
+    pool: databasePool,
+    users,
+    requireAuth: access.requireAuth,
+    loginLimits,
+    cookieName
+  }));
+  app.use('/api/v1/terminales', access.requireAuth, createTerminalesRouter({ pool: databasePool }));
+  app.use('/api/v1/sincronizaciones', access.requireAuth, access.requireAdmin, createSynchronizationsRouter({
     pool: databasePool,
     importEnabled,
     snapshotConfig,
+    csrfProtection,
     ...(importService ? { importService } : {}),
     ...(synchronizationRepository ? { repositoryApi: synchronizationRepository } : {})
+  }));
+  app.use('/api/v1/usuarios', access.requireAuth, access.requireAdmin, createUsersRouter({
+    pool: databasePool,
+    users,
+    csrfProtection
   }));
 
   app.post('/api/cartera/celular', async (req, res) => {
@@ -73,6 +105,9 @@ function createApp({
   });
 
   app.use((error, req, res, next) => {
+    if (error.code === 'CORS_DENIED') {
+      return res.status(403).json({ ok: false, error: 'Origen no permitido.' });
+    }
     if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
       return res.status(400).json({ ok: false, error: 'El cuerpo debe ser JSON válido.' });
     }

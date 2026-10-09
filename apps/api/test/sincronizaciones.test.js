@@ -7,6 +7,7 @@ const { buildPlan, diffFields } = require('../src/sincronizaciones/domain');
 const repository = require('../src/sincronizaciones/repository');
 const { ImportError, importSnapshot, reconcilePendingQueue } = require('../src/sincronizaciones/service');
 const { SnapshotError, parseSnapshot, readSnapshot } = require('../src/sincronizaciones/snapshot');
+const { baseAppOptions } = require('./test-app-options');
 
 function jsonBuffer(value) {
   return Buffer.from(JSON.stringify(value), 'utf8');
@@ -279,14 +280,13 @@ test('el endpoint de importación está protegido y deshabilitado por defecto', 
     apiKey: 'test-key',
     databasePool: { query: async () => ({ rows: [] }) },
     checkDatabaseFn: async () => {},
-    sendMailFn: async () => {}
+    sendMailFn: async () => {},
+    ...baseAppOptions()
   });
-  const unauthorized = await request(app, { method: 'POST', path: '/api/v1/sincronizaciones' });
-  assert.equal(unauthorized.status, 401);
   const disabled = await request(app, {
     method: 'POST',
     path: '/api/v1/sincronizaciones',
-    headers: { 'X-API-Key': 'test-key', 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'test-csrf-token' },
     body: {}
   });
   assert.equal(disabled.status, 403);
@@ -303,17 +303,18 @@ test('expone historial paginado y detalle de sincronización protegidos', async 
     databasePool: { query: async () => ({ rows: [] }) },
     checkDatabaseFn: async () => {},
     sendMailFn: async () => {},
-    synchronizationRepository
+    synchronizationRepository,
+    ...baseAppOptions()
   });
   const list = await request(app, {
     path: '/api/v1/sincronizaciones?pagina=1&limite=20',
-    headers: { 'X-API-Key': 'test-key' }
+    headers: {}
   });
   assert.equal(list.status, 200);
   assert.equal(list.body.paginacion.total, 1);
   const detail = await request(app, {
     path: '/api/v1/sincronizaciones/7',
-    headers: { 'X-API-Key': 'test-key' }
+    headers: {}
   });
   assert.equal(detail.status, 200);
   assert.equal(detail.body.id, '7');
@@ -331,12 +332,13 @@ test('el endpoint habilitado inicia solo la ruta configurada del servidor', asyn
     importService: async (options) => {
       received = options;
       return { id: 1, estado: 'COMPLETADA' };
-    }
+    },
+    ...baseAppOptions()
   });
   const response = await request(app, {
     method: 'POST',
     path: '/api/v1/sincronizaciones',
-    headers: { 'X-API-Key': 'test-key', 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'test-csrf-token' },
     body: { confirmar_inactivacion_masiva: true, ruta: '/ruta-del-cliente' }
   });
   assert.equal(response.status, 200);
@@ -357,9 +359,11 @@ test('valida límite de tamaño y archivo inexistente', async () => {
 
 test('los endpoints de health, terminales y correo permanecen registrados', async () => {
   const pool = { async query() { return { rows: [] }; } };
-  const app = createApp({ apiKey: 'test-key', databasePool: pool, checkDatabaseFn: async () => {}, sendMailFn: async () => {} });
+  const app = createApp({
+    apiKey: 'test-key', databasePool: pool, checkDatabaseFn: async () => {}, sendMailFn: async () => {}, ...baseAppOptions()
+  });
   assert.equal((await request(app, { path: '/api/v1/health', headers: { 'X-API-Key': 'test-key' } })).status, 200);
-  assert.equal((await request(app, { path: '/api/v1/terminales', headers: { 'X-API-Key': 'test-key' } })).status, 200);
+  assert.equal((await request(app, { path: '/api/v1/terminales' })).status, 200);
   assert.equal((await request(app, {
     method: 'POST', path: '/api/cartera/celular', headers: { 'X-API-Key': 'test-key', 'Content-Type': 'application/json' }, body: { terminal: '001', celular: '999' }
   })).status, 202);
