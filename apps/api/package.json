@@ -17,6 +17,7 @@
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
-    "isomorphic-fetch": "^3.0.0"
+    "isomorphic-fetch": "^3.0.0",
+    "pg": "^8.16.3"
   }
 }

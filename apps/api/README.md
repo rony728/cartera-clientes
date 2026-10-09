@@ -11,7 +11,7 @@ npm install
 cp .env.example .env
 ```
 
-Edita `.env` y configura `MAIL_TO` con el destinatario y `API_KEY` con una clave temporal segura. El `MS_CLIENT_ID` del ejemplo corresponde a la aplicación de Microsoft Entra indicada para esta prueba. No subas `.env` ni el caché de MSAL a Git.
+Edita `.env` y configura `MAIL_TO` con el destinatario, `API_KEY` con una clave temporal segura y las variables `DB_*` con las credenciales del usuario de PostgreSQL de la API. El `MS_CLIENT_ID` del ejemplo corresponde a la aplicación de Microsoft Entra indicada para esta prueba. No subas `.env` ni el caché de MSAL a Git.
 
 La aplicación debe tener el permiso delegado de Microsoft Graph `Mail.Send` y estar configurada para permitir flujos de clientes públicos. La autoridad `common` permite cuentas organizacionales y cuentas personales de Microsoft.
 
@@ -54,4 +54,15 @@ Si falta `X-API-Key` o no coincide con `API_KEY`, la API responde HTTP 401. Si M
 
 Esta autenticación con `X-API-Key` es temporal para pruebas del backend. No incrustes esta clave en la futura PWA; la PWA deberá usar un mecanismo de autenticación apropiado.
 
-No se implementan todavía base de datos, frontend, túnel, autenticación de usuarios ni otros campos del Excel.
+## Salud de PostgreSQL
+
+La API usa un pool compartido de PostgreSQL y el endpoint protegido ejecuta únicamente `SELECT 1`:
+
+```sh
+curl -i http://127.0.0.1:3005/api/v1/health \
+  -H 'X-API-Key: CAMBIAR_POR_UNA_CLAVE_SEGURA'
+```
+
+Con PostgreSQL disponible responde HTTP 200 con `{"status":"ok","database":"connected"}`. Si no está disponible responde HTTP 503 con `{"status":"error","database":"unavailable"}` sin revelar detalles de conexión.
+
+No se ejecutan migraciones desde la API ni se modifican tablas en esta etapa. Tampoco se implementan frontend, túnel, autenticación de usuarios ni otros campos del Excel.

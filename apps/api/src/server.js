@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const { sendMail } = require('./mail');
+const { checkDatabase, closeDatabase } = require('./database');
 
 const app = express();
 const host = process.env.HOST || '127.0.0.1';
@@ -22,6 +23,16 @@ function requireApiKey(req, res, next) {
 
 app.use('/api/cartera/celular', requireApiKey);
 app.use(express.json({ limit: '16kb' }));
+
+app.get('/api/v1/health', requireApiKey, async (req, res) => {
+  try {
+    await checkDatabase();
+    return res.status(200).json({ status: 'ok', database: 'connected' });
+  } catch (error) {
+    console.error(`PostgreSQL no disponible: ${error.name || 'Error'}`);
+    return res.status(503).json({ status: 'error', database: 'unavailable' });
+  }
+});
 
 function validateValue(value) {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -76,4 +87,18 @@ app.use((error, req, res, next) => {
 
 app.listen(port, host, () => {
   console.log(`API escuchando en http://${host}:${port}`);
+});
+
+async function shutdown(signal) {
+  console.log(`Cerrando API (${signal}).`);
+  await closeDatabase();
+  process.exit(0);
+}
+
+process.on('SIGINT', () => {
+  shutdown('SIGINT').catch(() => process.exit(1));
+});
+
+process.on('SIGTERM', () => {
+  shutdown('SIGTERM').catch(() => process.exit(1));
 });
