@@ -1,24 +1,7 @@
-const JSON_FIELD_SQL = Object.freeze({
-  NombreComercial: "t.datos_excel->>'NombreComercial'",
-  CodigoComercio: "t.datos_excel->>'CodigoComercio'",
-  Inventario: "t.datos_excel->>'Inventario'",
-  SeriePOS: "t.datos_excel->>'SeriePOS'"
-});
-
-const SEARCH_FIELD_SQL = Object.freeze({
-  terminal: 't.terminal',
-  ...JSON_FIELD_SQL
-});
+const { FILTER_FIELDS, SEARCH_FIELDS } = require('./fields');
 
 function escapeLike(value) {
   return value.replace(/[\\%_]/gu, (character) => `\\${character}`);
-}
-
-function getSearchExpressions(campo) {
-  if (campo === 'todos') {
-    return Object.values(SEARCH_FIELD_SQL);
-  }
-  return [SEARCH_FIELD_SQL[campo]];
 }
 
 function getStateCondition(estado) {
@@ -32,19 +15,41 @@ function buildSearchQuery(filters) {
   const conditions = [getStateCondition(filters.estado)];
   const values = [];
 
+  const addValue = (value) => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+
   if (filters.q !== null) {
-    values.push(filters.q, escapeLike(filters.q));
-    const expressions = getSearchExpressions(filters.campo);
-    conditions.push(`(${expressions.map((expression) => `${expression} ILIKE '%' || $2 || '%' ESCAPE '\\'`).join(' OR ')})`);
+    const pattern = addValue(escapeLike(filters.q));
+    if (filters.campo === 'todos') {
+      conditions.push(`(t.terminal ILIKE '%' || ${pattern} || '%' ESCAPE '\\'
+        OR EXISTS (
+          SELECT 1 FROM jsonb_each_text(t.datos_excel) AS property
+          WHERE property.value ILIKE '%' || ${pattern} || '%' ESCAPE '\\'
+        ))`);
+    } else if (filters.campo === 'terminal') {
+      conditions.push(`t.terminal ILIKE '%' || ${pattern} || '%' ESCAPE '\\'`);
+    } else {
+      const key = addValue(filters.campo);
+      conditions.push(`(t.datos_excel ->> ${key}) ILIKE '%' || ${pattern} || '%' ESCAPE '\\'`);
+    }
   }
 
-  const offsetIndex = values.length + 1;
-  const limitIndex = values.length + 2;
-  values.push(offset, filters.limite);
+  for (const [field, value] of Object.entries(filters.filtros || {})) {
+    if (!FILTER_FIELDS.includes(field)) continue;
+    const key = addValue(field);
+    const filterValue = addValue(value);
+    conditions.push(`(t.datos_excel ->> ${key}) = ${filterValue}`);
+  }
 
-  const orderBy = filters.q === null
-    ? 't.terminal ASC'
-    : "CASE WHEN t.terminal = $1 THEN 0 WHEN t.terminal ILIKE $2 || '%' ESCAPE '\\' THEN 1 ELSE 2 END, t.terminal ASC";
+  const sortExpression = filters.orden === 'Terminal'
+    ? 't.terminal'
+    : `(t.datos_excel ->> ${addValue(filters.orden)})`;
+
+  const offsetParam = addValue(offset);
+  const limitParam = addValue(filters.limite);
+  const direction = filters.direccion === 'desc' ? 'DESC' : 'ASC';
 
   const text = `
     SELECT
@@ -58,9 +63,9 @@ function buildSearchQuery(filters) {
       COUNT(*) OVER() AS total_count
     FROM public.terminales AS t
     WHERE ${conditions.join(' AND ')}
-    ORDER BY ${orderBy}
-    OFFSET $${offsetIndex}
-    LIMIT $${limitIndex}
+    ORDER BY ${sortExpression} ${direction} NULLS LAST, t.terminal ASC
+    OFFSET ${offsetParam}
+    LIMIT ${limitParam}
   `;
 
   return { text, values };

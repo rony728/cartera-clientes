@@ -58,6 +58,7 @@ function fakeUsers(overrides = {}) {
     },
     async clearLoginFailures(_pool, key) { attempts.delete(key); },
     async updateLastAccess() {},
+    async resetUserPassword() { return true; },
     async listUsers() { return [user].map(({ password_hash, ...safe }) => safe); },
     ...overrides
   };
@@ -105,6 +106,27 @@ test('login correcto crea cookie HttpOnly, regenera sesión y permite /auth/me',
   const me = await request(app, { path: '/api/v1/auth/me', headers: { Cookie: cookieFrom(login) } });
   assert.equal(me.status, 200);
   assert.deepEqual(Object.keys(me.body).sort(), ['autenticado', 'id', 'nombre', 'rol', 'usuario']);
+});
+
+test('cambio de contraseña propio exige clave actual, CSRF y una clave nueva válida', async () => {
+  let reset = null;
+  const users = fakeUsers({ async resetUserPassword(_pool, id, passwordHash) { reset = { id, passwordHash }; return true; } });
+  const app = authApp({ users });
+  const initial = await csrfSession(app);
+  const login = await request(app, {
+    method: 'POST', path: '/api/v1/auth/login',
+    headers: { Cookie: initial.cookie, 'X-CSRF-Token': initial.token, 'Content-Type': 'application/json' },
+    body: { usuario: 'admin', password: 'Contraseña-Segura-123!' }
+  });
+  const changed = await request(app, {
+    method: 'POST', path: '/api/v1/auth/password',
+    headers: { Cookie: cookieFrom(login), 'X-CSRF-Token': login.body.csrf_token, 'Content-Type': 'application/json' },
+    body: { password_actual: 'Contraseña-Segura-123!', password_nueva: 'Otra-Contraseña-Segura-456!' }
+  });
+  assert.equal(changed.status, 200);
+  assert.equal(reset.id, '1');
+  assert.notEqual(reset.passwordHash, 'Otra-Contraseña-Segura-456!');
+  assert.equal((await request(app, { path: '/api/v1/auth/me', headers: { Cookie: cookieFrom(login) } })).status, 401);
 });
 
 test('contraseña incorrecta, usuario inexistente e inactivo usan mensaje genérico', async () => {

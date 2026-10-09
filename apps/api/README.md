@@ -71,11 +71,11 @@ curl -i http://127.0.0.1:3005/api/v1/health \
 
 Con PostgreSQL disponible responde HTTP 200 con `{"status":"ok","database":"connected"}`. Si no está disponible responde HTTP 503 con `{"status":"error","database":"unavailable"}` sin revelar detalles de conexión.
 
-No se ejecutan migraciones desde la API ni se modifican tablas en esta etapa. Tampoco se implementan frontend, túnel, autenticación de usuarios ni otros campos del Excel.
+La API no ejecuta migraciones automáticamente. La PWA y la autenticación por sesiones se documentan más adelante; la API key queda limitada a salud y al endpoint heredado de correo.
 
 ## Consulta de terminales
 
-Todos los endpoints de consulta requieren `X-API-Key` y escuchan inicialmente solo en `127.0.0.1`.
+Los endpoints de consulta requieren una sesión autenticada. `USUARIO` queda limitado a activas y `ADMIN` puede solicitar otros estados.
 
 ### Buscar terminales
 
@@ -86,7 +86,7 @@ GET /api/v1/terminales
 Parámetros opcionales:
 
 - `q`: término de búsqueda.
-- `campo`: `todos` (predeterminado), `terminal`, `NombreComercial`, `CodigoComercio`, `Inventario` o `SeriePOS`.
+- `campo`: `todos` (predeterminado), `terminal` o cualquiera de los campos de negocio permitidos por la API, incluidos nombre, comercio, inventario, series, contacto y ubicación.
 - `pagina`: página positiva, predeterminada `1`.
 - `limite`: entre `1` y `100`, predeterminado `20`.
 - `estado`: `activas` (predeterminado), `inactivas` o `todas`.
@@ -95,7 +95,7 @@ Ejemplo:
 
 ```sh
 curl -G http://127.0.0.1:3005/api/v1/terminales \
-  -H 'X-API-Key: CAMBIAR_POR_UNA_CLAVE_SEGURA' \
+  -b cookies.txt \
   --data-urlencode 'q=2004' \
   --data-urlencode 'campo=terminal' \
   --data-urlencode 'pagina=1' \
@@ -137,10 +137,10 @@ Ejemplo:
 
 ```sh
 curl -i http://127.0.0.1:3005/api/v1/terminales/00000000 \
-  -H 'X-API-Key: CAMBIAR_POR_UNA_CLAVE_SEGURA'
+  -b cookies.txt
 ```
 
-La consulta individual respeta el identificador como texto, incluidos ceros a la izquierda, y devuelve también terminales inactivas. Si no existe, responde HTTP 404.
+La consulta individual respeta el identificador como texto, incluidos ceros a la izquierda. Solo `ADMIN` puede ver inactivas. Si no existe, responde HTTP 404.
 
 Las consultas usan SQL parametrizado, una lista cerrada de campos JSONB y paginación en PostgreSQL. No se descargan todos los registros a Node.js ni se permiten consultas SQL arbitrarias.
 
@@ -174,7 +174,7 @@ El archivo se lee sin modificarlo. Se comprueban tamaño, legibilidad y estabili
 
 ### Endpoints administrativos
 
-Todos requieren `X-API-Key`. Esta protección es temporal y no sustituye autenticación ni rol `ADMIN`.
+Todos requieren sesión y rol `ADMIN`; iniciar una importación también requiere CSRF.
 
 ```text
 POST /api/v1/sincronizaciones
@@ -197,7 +197,8 @@ Cuando la validación en Ubuntu y la autorización administrativa estén listas,
 ```sh
 curl -i -X POST http://127.0.0.1:3005/api/v1/sincronizaciones \
   -H 'Content-Type: application/json' \
-  -H 'X-API-Key: CAMBIAR_POR_UNA_CLAVE_SEGURA' \
+  -b cookies.txt \
+  -H 'X-CSRF-Token: TOKEN_DE_LA_SESION' \
   -d '{}'
 ```
 
@@ -245,7 +246,7 @@ npm test
 npm audit --omit=dev
 ```
 
-Las pruebas usan fixtures sintéticas y dependencias PostgreSQL simuladas; no modifican producción ni envían correos. Antes de habilitar `SNAPSHOT_IMPORT_ENABLED` en Ubuntu se debe validar `SNAPSHOT_RECORDS_PATH` con el archivo real, ejecutar las pruebas de integración contra una base aislada y completar autenticación administrativa. La resolución manual de conflictos todavía no está implementada.
+Las pruebas usan fixtures sintéticas y dependencias PostgreSQL simuladas; no modifican producción ni envían correos. Antes de habilitar `SNAPSHOT_IMPORT_ENABLED` en Ubuntu se debe validar `SNAPSHOT_RECORDS_PATH` con el archivo real y ejecutar las pruebas de integración contra una base aislada. La resolución manual de conflictos todavía no está implementada.
 
 La suite PostgreSQL real y el validador de snapshot se documentan en [../../docs/integration-testing.md](../../docs/integration-testing.md). Estas herramientas exigen una base separada, rechazan expresamente las bases de producción y no envían correo.
 
@@ -302,3 +303,19 @@ curl -i -b cookies.txt \
 La configuración completa, migración y creación inicial del administrador se describen en [../../docs/authentication.md](../../docs/authentication.md).
 
 La configuración HTTPS para el túnel existente, CORS, validación previa, despliegue PM2 y rollback se documentan en [../../docs/production-security.md](../../docs/production-security.md).
+
+## Contratos para la PWA
+
+La Etapa 7 incorpora:
+
+```text
+GET   /api/v1/terminales/filtros/opciones
+GET   /api/v1/terminales/dashboard/resumen
+GET   /api/v1/terminales/:terminal/historial
+PATCH /api/v1/terminales/:terminal
+POST  /api/v1/auth/password
+```
+
+La edición exige `version`, `cambios` y CSRF; persiste e historiza todos los campos admitidos. Únicamente `Celular` dispone actualmente de propagación confirmada hacia Power Automate. Consulta [../../docs/frontend-architecture.md](../../docs/frontend-architecture.md) para el contrato y las limitaciones.
+
+`filtros/opciones` devuelve los valores distintos de filtros y los nombres de campos dinámicos visibles para el rol actual. No revela metadatos de terminales inactivas a `USUARIO`.

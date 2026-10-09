@@ -1,0 +1,3 @@
+import type { Terminal } from './types';import { metaFor } from './fields';
+export function safeCell(value:unknown){const text=String(value??'');return /^[=+\-@]/u.test(text)?`'${text}`:text;}
+export async function exportTerminals(rows:Terminal[],columns:string[],offline=false){const{default:writeXlsxFile}=await import('write-excel-file');const header=[{value:'Terminal',fontWeight:'bold' as const},...columns.map(c=>({value:metaFor(c).label,fontWeight:'bold' as const}))];const data=rows.map(t=>[{value:safeCell(t.terminal),type:String},...columns.map(c=>({value:safeCell(t.datos_excel[c]),type:String}))]);await writeXlsxFile([header,...data],{fileName:`cartera-${offline?'offline-':''}${new Date().toISOString().slice(0,10)}.xlsx`,sheet:'Cartera'});}

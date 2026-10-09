@@ -1,16 +1,26 @@
-# Cartera de clientes
+# Cartera de Clientes
 
-Monorepo para la aplicación de cartera de clientes.
+Monorepositorio de una aplicación empresarial para consultar y mantener una cartera de terminales POS. Incluye una PWA React offline-first, una API Express ejecutada en Ubuntu, PostgreSQL y sincronización controlada con Excel de SharePoint mediante Microsoft Graph, correo y Power Automate.
 
-## Componentes
+## Aplicaciones
 
-- `apps/api`: API Node.js/Express ejecutada inicialmente en Ubuntu, conectada a PostgreSQL y con envío de actualizaciones mediante Microsoft Graph, correo y Power Automate hacia Excel en SharePoint.
-- `apps/web`: carpeta reservada para la futura PWA de consulta y edición de la cartera.
-- `docs`: documentación del proyecto.
-- PostgreSQL se incorporará en una etapa futura como persistencia de la aplicación.
+- `apps/web`: PWA React + TypeScript + Vite. Búsqueda paginada, filtros, detalle y edición, historial, dashboard, administración, exportación y escáner.
+- `apps/api`: API Express, sesiones PostgreSQL, roles, CSRF, consultas y sincronización.
+- `database/migrations`: esquema PostgreSQL versionado.
+- `docs`: arquitectura, seguridad, pruebas y despliegue.
 
-## Estado actual
+## Desarrollo
 
-La API incluye sesiones persistentes, roles `ADMIN`/`USUARIO`, consultas paginadas en PostgreSQL, importación manual de snapshots de Excel y envío de actualizaciones a Power Automate. Para configurarla y ejecutarla, consulta [apps/api/README.md](apps/api/README.md) y [docs/authentication.md](docs/authentication.md).
+```sh
+cd apps/api
+npm install
+npm test
+npm run start:api
 
-Todavía no se implementan frontend/PWA, IndexedDB, Cloudflare Tunnel, edición desde la PWA ni resolución manual de conflictos.
+cd ../web
+npm install
+cp .env.example .env
+npm run dev
+```
+
+La guía del frontend está en [apps/web/README.md](apps/web/README.md) y sus decisiones técnicas en [docs/frontend-architecture.md](docs/frontend-architecture.md). Ningún `.env`, token, contraseña o API key debe incorporarse al repositorio ni al bundle web.

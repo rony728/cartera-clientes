@@ -6,7 +6,7 @@ La API pública utiliza `https://api-cartera.rtdev.uk`. Cloudflare termina HTTPS
 
 Este procedimiento no crea túneles, no modifica DNS o credenciales de Cloudflare, no abre el puerto 3005, no ejecuta migraciones y no cambia PostgreSQL. La API debe seguir enlazada exclusivamente a `127.0.0.1`.
 
-El origen previsto para la futura PWA es `https://cartera.rtdev.uk`. Aún debe confirmarse antes del despliegue del frontend. CORS compara orígenes exactos, permite credenciales y no reemplaza la autenticación ni los roles.
+El origen previsto para la PWA es `https://cartera.rtdev.uk`. Debe confirmarse antes de su despliegue. CORS compara orígenes exactos, permite credenciales y no reemplaza la autenticación ni los roles.
 
 ## Archivo `.env` completo para Ubuntu
 
@@ -23,7 +23,7 @@ API_KEY=REEMPLAZAR_CLAVE_API_ALEATORIA
 
 SESSION_SECRET=REEMPLAZAR_SECRETO_ALEATORIO_DE_32_O_MAS_CARACTERES
 SESSION_COOKIE_NAME=cartera.sid
-SESSION_MAX_AGE_MS=28800000
+SESSION_MAX_AGE_MS=604800000
 COOKIE_SECURE=true
 COOKIE_SAME_SITE=lax
 TRUST_PROXY=1

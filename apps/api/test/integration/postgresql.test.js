@@ -8,6 +8,7 @@ const authRepository = require('../../src/auth/repository');
 const { hashPassword } = require('../../src/auth/password');
 const { createSessionMiddleware } = require('../../src/auth/session');
 const repository = require('../../src/sincronizaciones/repository');
+const terminalRepository = require('../../src/terminales/repository');
 const { ImportError, importSnapshot } = require('../../src/sincronizaciones/service');
 const { SnapshotError, parseSnapshot } = require('../../src/sincronizaciones/snapshot');
 const {
@@ -328,6 +329,46 @@ test('PostgreSQL aplica claves foráneas y tipos JSONB reales', async () => {
     () => pool.query("INSERT INTO public.terminales (terminal, datos_excel) VALUES ('BAD', '[]'::jsonb)"),
     (error) => error.code === '23514'
   );
+});
+
+test('consultas auxiliares y edición de terminales funcionan con PostgreSQL real sin duplicar historial', async () => {
+  await importer(syntheticSnapshot([
+    { Terminal: 'EDIT-001', NombreComercial: 'Comercio Norte', Ciudad: 'Tegucigalpa', Zona: 'Norte', Celular: '1111' }
+  ]));
+  const user = await pool.query({
+    text: `INSERT INTO public.usuarios (nombre, usuario, password_hash, rol)
+      VALUES ('Editor sintético', 'editor_test', 'hash-sintético', 'USUARIO') RETURNING id`
+  });
+  const options = await terminalRepository.getFilterOptions(pool, true);
+  assert.deepEqual(options.Ciudad, ['Tegucigalpa']);
+  const fields = await terminalRepository.getFieldNames(pool, true);
+  assert.ok(fields.includes('NombreComercial'));
+  assert.ok(fields.includes('Celular'));
+  const dashboard = await terminalRepository.getDashboard(pool, true);
+  assert.equal(dashboard.indicadores.activas, 1);
+  assert.equal(dashboard.indicadores.inactivas, null);
+
+  const updated = await terminalRepository.updateTerminal(pool, {
+    terminal: 'EDIT-001', version: 1,
+    changes: { Celular: '2222', CampoDinamico: 'valor' }, userId: user.rows[0].id
+  });
+  assert.equal(updated.kind, 'updated');
+  assert.equal(updated.terminal.version, '2');
+  assert.equal(updated.queue.length, 2);
+  assert.equal((await pool.query("SELECT count(*)::int AS total FROM public.historial_cambios WHERE terminal = 'EDIT-001' AND origen = 'PWA'")).rows[0].total, 2);
+
+  const identical = await terminalRepository.updateTerminal(pool, {
+    terminal: 'EDIT-001', version: 2,
+    changes: { Celular: '2222', CampoDinamico: 'valor' }, userId: user.rows[0].id
+  });
+  assert.equal(identical.kind, 'unchanged');
+  assert.equal((await pool.query("SELECT count(*)::int AS total FROM public.historial_cambios WHERE terminal = 'EDIT-001' AND origen = 'PWA'")).rows[0].total, 2);
+
+  const conflict = await terminalRepository.updateTerminal(pool, {
+    terminal: 'EDIT-001', version: 1, changes: { Ciudad: 'Otra' }, userId: user.rows[0].id
+  });
+  assert.equal(conflict.kind, 'conflict');
+  assert.equal(conflict.current.datos_excel.Ciudad, 'Tegucigalpa');
 });
 
 test('HTTP real persiste e invalida sesiones y aplica ADMIN, USUARIO, CSRF e importación deshabilitada', async () => {

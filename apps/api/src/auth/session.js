@@ -5,7 +5,7 @@ function createSessionMiddleware({
   pool,
   secret,
   name = 'cartera.sid',
-  maxAgeMs = 8 * 60 * 60 * 1000,
+  maxAgeMs = 7 * 24 * 60 * 60 * 1000,
   secure = false,
   sameSite = 'lax'
 }) {

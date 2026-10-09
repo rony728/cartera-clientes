@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const express = require('express');
 const { createCsrfToken, csrfProtection, ensureCsrfToken } = require('./csrf');
-const { hashPassword, verifyPassword } = require('./password');
+const { hashPassword, validatePassword, verifyPassword } = require('./password');
 
 const DUMMY_PASSWORD_HASH = hashPassword('No-es-una-contraseña-real-123!');
 
@@ -98,6 +98,26 @@ function createAuthRouter({ pool, users, requireAuth, loginLimits, cookieName })
       await destroySession(req);
       res.clearCookie(cookieName, { path: '/' });
       return res.status(200).json({ ok: true, mensaje: 'Sesión cerrada.' });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.post('/password', requireAuth, csrfProtection, async (req, res, next) => {
+    const currentPassword = req.body?.password_actual;
+    const newPassword = req.body?.password_nueva;
+    if (typeof currentPassword !== 'string' || !validatePassword(newPassword)) {
+      return res.status(400).json({ ok: false, mensaje: 'Datos de contraseña inválidos.' });
+    }
+    try {
+      const user = await users.findUserByUsername(pool, req.user.usuario);
+      if (!user || !await verifyPassword(user.password_hash, currentPassword)) {
+        return res.status(401).json({ ok: false, mensaje: 'La contraseña actual no es correcta.' });
+      }
+      await users.resetUserPassword(pool, req.user.id, await hashPassword(newPassword));
+      await destroySession(req);
+      res.clearCookie(cookieName, { path: '/' });
+      return res.status(200).json({ ok: true, mensaje: 'Contraseña actualizada. Inicia sesión nuevamente.' });
     } catch (error) {
       return next(error);
     }

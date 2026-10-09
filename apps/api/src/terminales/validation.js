@@ -1,11 +1,6 @@
-const CAMPOS_PERMITIDOS = Object.freeze([
-  'todos',
-  'terminal',
-  'NombreComercial',
-  'CodigoComercio',
-  'Inventario',
-  'SeriePOS'
-]);
+const { FILTER_FIELDS, INTERNAL_FIELDS, SEARCH_FIELDS, SORT_FIELDS } = require('./fields');
+
+const CAMPOS_PERMITIDOS = Object.freeze(['todos', 'terminal', ...SEARCH_FIELDS.filter((field) => field !== 'Terminal')]);
 
 const ESTADOS_PERMITIDOS = Object.freeze(['activas', 'inactivas', 'todas']);
 
@@ -44,13 +39,16 @@ function parseSearchParams(query) {
   const rawQuery = getSingleQueryValue(query.q, 'q');
   const rawCampo = getSingleQueryValue(query.campo, 'campo');
   const rawEstado = getSingleQueryValue(query.estado, 'estado');
+  const rawOrden = getSingleQueryValue(query.orden, 'orden');
+  const rawDireccion = getSingleQueryValue(query.direccion, 'direccion');
 
   if (rawQuery !== undefined && rawQuery.length > 200) {
     throw new ValidationError('El parámetro q es demasiado largo.');
   }
 
   const campo = rawCampo || 'todos';
-  if (!CAMPOS_PERMITIDOS.includes(campo)) {
+  if (!CAMPOS_PERMITIDOS.includes(campo)
+      && (campo.length > 120 || INTERNAL_FIELDS.has(campo) || !/^[\p{L}\p{N} _@.-]+$/u.test(campo))) {
     throw new ValidationError('El parámetro campo no es válido.');
   }
 
@@ -59,12 +57,29 @@ function parseSearchParams(query) {
     throw new ValidationError('El parámetro estado no es válido.');
   }
 
+  const orden = rawOrden || 'NombreComercial';
+  if (!SORT_FIELDS.includes(orden)) throw new ValidationError('El parámetro orden no es válido.');
+  const direccion = rawDireccion || 'asc';
+  if (!['asc', 'desc'].includes(direccion)) throw new ValidationError('El parámetro direccion no es válido.');
+
+  const filtros = {};
+  for (const field of FILTER_FIELDS) {
+    const value = getSingleQueryValue(query[field], field);
+    if (value !== undefined && value.trim() !== '') {
+      if (value.length > 200) throw new ValidationError(`El filtro ${field} es demasiado largo.`);
+      filtros[field] = value;
+    }
+  }
+
   return {
     q: rawQuery === undefined || rawQuery.trim() === '' ? null : rawQuery.trim(),
     campo,
     pagina: parsePositiveInteger(query.pagina, 'pagina', 1),
     limite: parsePositiveInteger(query.limite, 'limite', 20, 100),
-    estado
+    estado,
+    orden,
+    direccion,
+    filtros
   };
 }
 

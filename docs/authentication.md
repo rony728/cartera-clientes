@@ -22,7 +22,7 @@ Las migraciones 001 y 002 ya fueron ejecutadas en Ubuntu. No deben volver a ejec
 ```env
 SESSION_SECRET=VALOR_ALEATORIO_DE_AL_MENOS_32_CARACTERES
 SESSION_COOKIE_NAME=cartera.sid
-SESSION_MAX_AGE_MS=28800000
+SESSION_MAX_AGE_MS=604800000
 COOKIE_SECURE=true
 COOKIE_SAME_SITE=lax
 TRUST_PROXY=1
@@ -58,4 +58,4 @@ Las solicitudes sin sesión reciben HTTP 401. Las sesiones sin rol suficiente re
 
 El procedimiento operativo actual está en [production-security.md](production-security.md). No crea administradores, no ejecuta migraciones y mantiene `SNAPSHOT_IMPORT_ENABLED=false`.
 
-No se implementan todavía interfaz de login, edición desde PWA ni resolución manual de conflictos.
+La interfaz de login y la edición desde la PWA se documentan en `frontend-architecture.md`. La resolución manual de conflictos sigue pendiente.

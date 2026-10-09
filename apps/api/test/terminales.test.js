@@ -115,22 +115,91 @@ test('busca parcialmente por Terminal con paginación', async () => {
   });
   assert.equal(response.status, 200);
   assert.deepEqual(response.body.paginacion, { pagina: 2, limite: 1, total: 2, total_paginas: 2 });
-  assert.deepEqual(pool.calls[0].values, ['123', '123', 1, 1]);
+  assert.deepEqual(pool.calls[0].values, ['123', 'NombreComercial', 1, 1]);
 });
 
 test('busca por cada propiedad JSONB permitida', async () => {
   for (const campo of ['NombreComercial', 'CodigoComercio', 'Inventario', 'SeriePOS']) {
     const filters = parseSearchParams({ q: 'valor', campo, estado: 'todas' });
     const query = buildSearchQuery(filters);
-    assert.match(query.text, new RegExp(`datos_excel->>['"]${campo}['"]`));
+    assert.match(query.text, /datos_excel ->> \$2/u);
+    assert.equal(query.values[1], campo);
   }
 });
 
-test('búsqueda general usa todos los campos permitidos', () => {
+test('permite buscar una columna dinámica segura y rechaza campos internos', () => {
+  const query = buildSearchQuery(parseSearchParams({ q: 'valor', campo: 'Nueva Columna 2026' }));
+  assert.equal(query.values[1], 'Nueva Columna 2026');
+  assert.throws(() => parseSearchParams({ campo: '@odata.etag' }), ValidationError);
+});
+
+test('búsqueda general usa los valores de todos los campos dinámicos sin buscar nombres de claves', () => {
   const query = buildSearchQuery(parseSearchParams({ q: 'valor', campo: 'todos' }));
-  for (const campo of ['NombreComercial', 'CodigoComercio', 'Inventario', 'SeriePOS']) {
-    assert.match(query.text, new RegExp(`datos_excel->>['"]${campo}['"]`));
+  assert.match(query.text, /jsonb_each_text/u);
+  assert.match(query.text, /property\.value ILIKE/u);
+  assert.doesNotMatch(query.text, /datos_excel::text ILIKE/u);
+  assert.match(query.text, /t\.terminal ILIKE/u);
+});
+
+test('combina filtros y orden antes de paginar usando parámetros SQL', () => {
+  const query = buildSearchQuery(parseSearchParams({
+    q: 'norte', campo: 'Ciudad', TecnicoAsignado: 'Ana', Zona: 'Norte',
+    orden: 'TecnicoAsignado', direccion: 'desc', pagina: '2', limite: '20'
+  }));
+  assert.match(query.text, /ORDER BY .* DESC NULLS LAST/su);
+  assert.deepEqual(query.values, ['norte', 'Ciudad', 'TecnicoAsignado', 'Ana', 'Zona', 'Norte', 'TecnicoAsignado', 20, 20]);
+  assert.doesNotMatch(query.text, /Ana|Norte/u);
+});
+
+test('expone opciones y nombres de campos dinámicos sin listas de valores codificadas', async () => {
+  const terminalRepository = {
+    async getFilterOptions(_pool, activeOnly) { assert.equal(activeOnly, true); return { Ciudad: ['Tegucigalpa'] }; },
+    async getFieldNames(_pool, activeOnly) { assert.equal(activeOnly, true); return ['Ciudad', 'CampoNuevo']; },
+    async getDashboard() { return {}; }, async getHistory() { return { datos: [], total: 0 }; }
+  };
+  const app = createApp({ apiKey:'key', databasePool:fakePool(), checkDatabaseFn:async()=>{}, sendMailFn:async()=>{}, terminalRepository, ...baseAppOptions('USUARIO') });
+  const response = await request(app, { path:'/api/v1/terminales/filtros/opciones' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { datos:{ Ciudad:['Tegucigalpa'] }, campos:['Ciudad','CampoNuevo'] });
+});
+
+test('edición exige versión, rechaza inactivas y expone conflictos sin sobrescribir', async () => {
+  const base = { terminal: '001', activa: true, version: '3', datos_excel: { Celular: '1' } };
+  for (const [kind, status, code] of [['inactive',409,'TERMINAL_INACTIVA'],['conflict',409,'VERSION_CONFLICT']]) {
+    const terminalRepository = {
+      async updateTerminal() { return { kind, current: base }; },
+      async getFilterOptions() { return {}; }, async getDashboard() { return {}; }, async getHistory() { return { datos: [], total: 0 }; }
+    };
+    const app = createApp({
+      apiKey: 'key', databasePool: fakePool(), checkDatabaseFn: async()=>{}, sendMailFn: async()=>{},
+      terminalRepository, ...baseAppOptions()
+    });
+    const response = await request(app,{method:'PATCH',path:'/api/v1/terminales/001',headers:{'Content-Type':'application/json','X-CSRF-Token':'test-csrf-token'},body:{version:3,cambios:{Celular:'2'}}});
+    assert.equal(response.status,status); assert.equal(response.body.codigo,code);
   }
+});
+
+test('edición guarda una vez y solo envía a Excel el campo Celular soportado', async () => {
+  const sent=[];const marked=[];
+  const terminalRepository={
+    async updateTerminal(){return{kind:'updated',terminal:{terminal:'001',activa:true,version:'2',datos_excel:{Celular:'999',Ciudad:'X'}},queue:[{id:1,campo:'Celular'},{id:2,campo:'Ciudad'}]};},
+    async markQueue(_pool,id,state){marked.push([id,state]);}, async getFilterOptions(){return{};},async getDashboard(){return{};},async getHistory(){return{datos:[],total:0};}
+  };
+  const app=createApp({apiKey:'key',databasePool:fakePool(),checkDatabaseFn:async()=>{},sendMailFn:async data=>sent.push(data),terminalRepository,...baseAppOptions()});
+  const response=await request(app,{method:'PATCH',path:'/api/v1/terminales/001',headers:{'Content-Type':'application/json','X-CSRF-Token':'test-csrf-token'},body:{version:1,cambios:{Celular:'999',Ciudad:'X'}}});
+  assert.equal(response.status,200);assert.deepEqual(sent,[{subject:'ACTUALIZAR_CARTERA|001|999'}]);assert.deepEqual(marked,[[1,'ENVIADO']]);
+  assert.deepEqual(response.body.propagacion,[{campo:'Celular',estado:'ENVIADO'},{campo:'Ciudad',estado:'PENDIENTE_INTEGRACION'}]);
+});
+
+test('edición rechaza delimitadores del protocolo de correo en Celular', async () => {
+  const { app } = appWithPool();
+  const response = await request(app, {
+    method: 'PATCH', path: '/api/v1/terminales/001',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'test-csrf-token' },
+    body: { version: 1, cambios: { Celular: '999|OTRO' } }
+  });
+  assert.equal(response.status, 400);
+  assert.match(response.body.mensaje, /Celular/u);
 });
 
 test('filtra por estado y calcula total de páginas', async () => {

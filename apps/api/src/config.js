@@ -34,7 +34,7 @@ function loadServerConfig(env = process.env) {
   const sessionMaxAgeMs = parsePositiveInteger(
     env.SESSION_MAX_AGE_MS,
     'SESSION_MAX_AGE_MS',
-    28_800_000,
+    604_800_000,
     60_000
   );
   const cookieSecure = parseBoolean(env.COOKIE_SECURE, 'COOKIE_SECURE', false);

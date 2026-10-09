@@ -19,6 +19,7 @@ function createApp({
   snapshotConfig = {},
   importService,
   synchronizationRepository,
+  terminalRepository,
   sessionMiddleware,
   corsMiddleware = (_req, _res, next) => next(),
   users = authRepository,
@@ -59,7 +60,12 @@ function createApp({
     loginLimits,
     cookieName
   }));
-  app.use('/api/v1/terminales', access.requireAuth, createTerminalesRouter({ pool: databasePool }));
+  app.use('/api/v1/terminales', access.requireAuth, createTerminalesRouter({
+    pool: databasePool,
+    csrfProtection,
+    sendMailFn,
+    ...(terminalRepository ? { repositoryApi: terminalRepository } : {})
+  }));
   app.use('/api/v1/sincronizaciones', access.requireAuth, access.requireAdmin, createSynchronizationsRouter({
     pool: databasePool,
     importEnabled,
