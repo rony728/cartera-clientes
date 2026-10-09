@@ -11,6 +11,6 @@ Monorepo para la aplicación de cartera de clientes.
 
 ## Estado actual
 
-La API permite consultar terminales paginadas en PostgreSQL y enviar una actualización de celular a Power Automate. Para configurarla y ejecutarla, consulta [apps/api/README.md](apps/api/README.md).
+La API permite consultar terminales paginadas en PostgreSQL, importar manualmente snapshots de Excel y enviar una actualización de celular a Power Automate. Para configurarla y ejecutarla, consulta [apps/api/README.md](apps/api/README.md).
 
-Todavía no se implementan frontend/PWA, IndexedDB, Cloudflare Tunnel, autenticación de usuarios ni edición o sincronización de terminales.
+Todavía no se implementan frontend/PWA, IndexedDB, Cloudflare Tunnel, autenticación de usuarios, edición desde la PWA ni resolución manual de conflictos.

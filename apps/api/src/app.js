@@ -2,13 +2,18 @@ const express = require('express');
 const { sendMail } = require('./mail');
 const { checkDatabase, pool: defaultPool } = require('./database');
 const { createApiKeyMiddleware } = require('./middleware/api-key');
+const { createSynchronizationsRouter } = require('./sincronizaciones/routes');
 const { createTerminalesRouter } = require('./terminales/routes');
 
 function createApp({
   apiKey,
   databasePool = defaultPool,
   checkDatabaseFn = checkDatabase,
-  sendMailFn = sendMail
+  sendMailFn = sendMail,
+  importEnabled = false,
+  snapshotConfig = {},
+  importService,
+  synchronizationRepository
 } = {}) {
   if (!apiKey || apiKey.trim() === '') {
     throw new Error('Falta configurar API_KEY en .env.');
@@ -29,6 +34,13 @@ function createApp({
     }
   });
   app.use('/api/v1/terminales', requireApiKey, createTerminalesRouter({ pool: databasePool }));
+  app.use('/api/v1/sincronizaciones', requireApiKey, createSynchronizationsRouter({
+    pool: databasePool,
+    importEnabled,
+    snapshotConfig,
+    ...(importService ? { importService } : {}),
+    ...(synchronizationRepository ? { repositoryApi: synchronizationRepository } : {})
+  }));
 
   app.post('/api/cartera/celular', async (req, res) => {
     const { terminal, celular } = req.body || {};

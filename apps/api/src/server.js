@@ -11,7 +11,19 @@ function startServer() {
 
   const host = process.env.HOST || '127.0.0.1';
   const port = Number.parseInt(process.env.PORT || '3005', 10);
-  const app = createApp({ apiKey });
+  const maxSnapshotBytes = Number.parseInt(process.env.SNAPSHOT_MAX_BYTES || '10485760', 10);
+  if (!Number.isSafeInteger(maxSnapshotBytes) || maxSnapshotBytes < 1) {
+    throw new Error('SNAPSHOT_MAX_BYTES debe ser un entero positivo.');
+  }
+  const app = createApp({
+    apiKey,
+    importEnabled: process.env.SNAPSHOT_IMPORT_ENABLED === 'true',
+    snapshotConfig: {
+      filePath: process.env.SNAPSHOT_PATH || '/ruta/privada/cartera-snapshot/snapshot.json',
+      recordsPath: process.env.SNAPSHOT_RECORDS_PATH || '',
+      maxBytes: maxSnapshotBytes
+    }
+  });
   const server = app.listen(port, host, () => {
     console.log(`API escuchando en http://${host}:${port}`);
   });
