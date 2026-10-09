@@ -5,6 +5,7 @@
   "description": "Prueba mínima de envío de correo con Microsoft Graph desde Termux",
   "main": "src/mail.js",
   "scripts": {
+    "test": "node --test test/terminales.test.js",
     "test:mail": "node src/test-mail.js",
     "start": "node src/server.js",
     "start:api": "node src/server.js"
