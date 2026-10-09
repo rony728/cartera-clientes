@@ -4,7 +4,7 @@ import { Link,useLocation,useParams } from 'react-router-dom';
 import { useAuth } from '../Auth';
 import { api } from '../api';
 import { INTERNAL_FIELDS,metaFor } from '../fields';
-import { offlineTerminal } from '../offline';
+import { excelValue,offlineTerminal } from '../offline';
 import type { HistoryEntry,Page,Terminal } from '../types';
 import { Icon } from '../components/Icon';
 import { CommercePhoto } from '../components/CommercePhoto';
@@ -22,7 +22,7 @@ export default function Detail(){
  if(query.isLoading)return <div className="splash">Cargando ficha…</div>;
  if(!t)return <div className="empty"><h1>Terminal no disponible</h1><Link to={`/comercios${search}`}>Volver</Link></div>;
  const entries=Object.entries(t.datos_excel).filter(([k])=>!INTERNAL_FIELDS.has(k));
- return <section><div className="detail-head"><Link to={`/comercios${search}`}>← Comercios</Link><div><p className="eyebrow">Terminal {t.terminal}</p><h1>{String(t.datos_excel.NombreComercial||'Comercio sin nombre')}</h1><span className={`badge ${t.activa?'success':'muted'}`}>{t.activa?'Activa':'Inactiva'}</span></div>{t.activa&&!offline&&<Link className="button primary" to="editar" state={{search}}>Editar comercio</Link>}</div>
+ return <section><div className="detail-head"><Link to={`/comercios${search}`}>← Comercios</Link><div><p className="eyebrow">Terminal {t.terminal}</p><h1>{String(excelValue(t.datos_excel,'NombreComercial')||'Comercio sin nombre')}</h1><span className={`badge ${t.activa?'success':'muted'}`}>{t.activa?'Activa':'Inactiva'}</span></div>{t.activa&&!offline&&<Link className="button primary" to="editar" state={{search}}>Editar comercio</Link>}</div>
  {routeState?.message&&<div className="alert" role="status">{routeState.message}</div>}
  <CommercePhoto/>
  <div className="detail-groups">{groups.map(group=>{const values=entries.filter(([k])=>metaFor(k).group===group);if(!values.length)return null;return <details open={group==='Comercio'||group==='Terminal y equipo'} key={group}><summary>{group}</summary><div className="field-grid">{values.map(([key,value])=><div className="field" key={key}><span>{metaFor(key).label}</span><div><strong>{String(value??'—')}</strong><button className="icon-button" aria-label={`Copiar ${metaFor(key).label}`} onClick={()=>copy(key,value)}><Icon name="copy"/></button></div>{key==='Celular'&&validPhone(value)&&<div className="quick-links"><a href={`tel:${digits(value)}`}>Llamar</a><a href={`https://wa.me/${digits(value)}`} target="_blank" rel="noreferrer">WhatsApp</a></div>}{copied===key&&<small className="copied">Copiado</small>}</div>)}</div></details>;})}</div>

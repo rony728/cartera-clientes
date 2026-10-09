@@ -1,25 +1,214 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { clearUserData, replaceOfflineTerminals, searchOffline } from '../offline';
+import {
+  clearUserData,
+  offlineFilterOptions,
+  offlineTerminal,
+  replaceOfflineTerminals,
+  searchOffline
+} from '../offline';
 import type { SearchState, Terminal } from '../types';
 
-const state: SearchState = { q: 'norte', campo: 'todos', pagina: 1, limite: 20, estado: 'activas', orden: 'NombreComercial', direccion: 'asc', filtros: { Zona: 'Norte' } };
+const baseState: SearchState = {
+  q: '',
+  campo: 'todos',
+  pagina: 1,
+  limite: 20,
+  estado: 'activas',
+  orden: 'NombreComercial',
+  direccion: 'asc',
+  filtros: {}
+};
+
 const rows: Terminal[] = [
-  { terminal: '001', activa: true, version: '1', datos_excel: { NombreComercial: 'B', Zona: 'Norte' } },
-  { terminal: '002', activa: true, version: '1', datos_excel: { NombreComercial: 'A', Zona: 'Sur' } }
+  {
+    terminal: '00001234',
+    activa: true,
+    version: '1',
+    datos_excel: {
+      NombreComercial: 'Ferretería El Águila',
+      CodigoComercio: '00077',
+      SeriePOS: 'SÉRIE-ÁBC-09',
+      Inventario: 'INV-001',
+      Zona: 'Nórte',
+      Ciudad: 'Tegucigalpa',
+      CampoDinamico: 'Referencia especial'
+    }
+  },
+  {
+    terminal: '00005678',
+    activa: true,
+    version: '2',
+    datos_excel: {
+      NombreComercial: 'Abarrotes Central',
+      CodigoComercio: '00120',
+      SeriePOS: 'SERIE-XYZ-10',
+      Inventario: 'INV-002',
+      Zona: 'Sur',
+      Ciudad: 'San Pedro Sula'
+    }
+  },
+  {
+    terminal: '00009000',
+    activa: false,
+    version: '3',
+    datos_excel: {
+      NombreComercial: 'Ferretería Cerrada',
+      CodigoComercio: '00900',
+      SeriePOS: 'SERIE-CERRADA',
+      Inventario: 'INV-003',
+      Zona: 'Norte'
+    }
+  }
 ];
-beforeEach(async () => { await clearUserData('u1'); await clearUserData('u2'); });
-describe('copia offline', () => {
-  it('combina búsqueda, filtro, orden y paginación', async () => {
+
+beforeEach(async () => {
+  await clearUserData('u1');
+  await clearUserData('u2');
+});
+
+describe('consulta offline', () => {
+  it('encuentra un nombre comercial sin distinguir mayúsculas ni tildes', async () => {
     await replaceOfflineTerminals('u1', rows);
-    const result = await searchOffline('u1', state);
-    expect(result.datos.map((row) => row.terminal)).toEqual(['001']);
-    expect(result.paginacion.total).toBe(1);
+
+    const result = await searchOffline('u1', { ...baseState, q: 'FERRETERIA' });
+
+    expect(result.datos.map((row) => row.terminal)).toEqual(['00001234']);
   });
+
+  it.each([
+    ['terminal', '00123'],
+    ['CodigoComercio', '0077'],
+    ['SeriePOS', 'serie-abc'],
+    ['Inventario', 'inv-001']
+  ])('busca coincidencias parciales en %s', async (campo, q) => {
+    await replaceOfflineTerminals('u1', rows);
+
+    const result = await searchOffline('u1', { ...baseState, campo, q });
+
+    expect(result.datos.map((row) => row.terminal)).toEqual(['00001234']);
+  });
+
+  it('combina búsqueda, filtros, estado, orden y paginación', async () => {
+    await replaceOfflineTerminals('u1', rows);
+
+    const firstPage = await searchOffline('u1', {
+      ...baseState,
+      q: 'ferreteria',
+      pagina: 1,
+      limite: 1,
+      estado: 'todas',
+      orden: 'Terminal',
+      direccion: 'desc',
+      filtros: { Zona: 'norte' }
+    });
+    const secondPage = await searchOffline('u1', {
+      ...baseState,
+      q: 'ferreteria',
+      pagina: 2,
+      limite: 1,
+      estado: 'todas',
+      orden: 'Terminal',
+      direccion: 'desc',
+      filtros: { Zona: 'norte' }
+    });
+
+    expect(firstPage.datos.map((row) => row.terminal)).toEqual(['00009000']);
+    expect(secondPage.datos.map((row) => row.terminal)).toEqual(['00001234']);
+    expect(firstPage.paginacion).toMatchObject({ total: 2, total_paginas: 2 });
+  });
+
+  it('busca valores dinámicos pero no nombres internos de propiedades', async () => {
+    await replaceOfflineTerminals('u1', rows);
+
+    const valueMatch = await searchOffline('u1', { ...baseState, q: 'referencia especial' });
+    const propertyName = await searchOffline('u1', { ...baseState, q: 'CampoDinamico' });
+
+    expect(valueMatch.datos.map((row) => row.terminal)).toEqual(['00001234']);
+    expect(propertyName.paginacion.total).toBe(0);
+  });
+
+  it('resuelve diferencias de espacios, mayúsculas y tildes en nombres de campo', async () => {
+    await replaceOfflineTerminals('u1', [{
+      terminal: '00009999',
+      activa: true,
+      version: '1',
+      datos_excel: { 'Nombre Comercial': 'Café del Centro', 'Código Comercio': '00042' }
+    }]);
+
+    const byName = await searchOffline('u1', { ...baseState, campo: 'NombreComercial', q: 'cafe' });
+    const byCode = await searchOffline('u1', { ...baseState, campo: 'CodigoComercio', q: '0042' });
+
+    expect(byName.datos.map((row) => row.terminal)).toEqual(['00009999']);
+    expect(byCode.datos.map((row) => row.terminal)).toEqual(['00009999']);
+  });
+
+  it('genera opciones de filtros y campos dinámicos desde toda la copia local', async () => {
+    await replaceOfflineTerminals('u1', rows);
+
+    const options = await offlineFilterOptions('u1');
+
+    expect(options.datos.Zona).toEqual(['Nórte', 'Norte', 'Sur']);
+    expect(options.campos).toContain('CampoDinamico');
+  });
+
+  it('devuelve cero para términos realmente ausentes aunque existan registros locales', async () => {
+    await replaceOfflineTerminals('u1', rows);
+
+    const result = await searchOffline('u1', { ...baseState, q: 'comercio inexistente' });
+
+    expect(result.paginacion.total).toBe(0);
+  });
+
+  it('recorre los 1,000 registros locales y no solo la primera página descargada', async () => {
+    const thousandRows = Array.from({ length: 1_000 }, (_, index): Terminal => ({
+      terminal: String(index + 1).padStart(8, '0'),
+      activa: true,
+      version: '1',
+      datos_excel: {
+        NombreComercial: index === 999 ? 'Ferretería Índice Final' : `Comercio ${index + 1}`,
+        CodigoComercio: String(index + 1).padStart(7, '0')
+      }
+    }));
+    await replaceOfflineTerminals('u1', thousandRows);
+
+    const result = await searchOffline('u1', { ...baseState, q: 'ferreteria indice final' });
+
+    expect(result.paginacion.total).toBe(1);
+    expect(result.datos[0].terminal).toBe('00001000');
+  });
+
+  it('distingue un término ausente de una coincidencia bloqueada por filtros persistentes', async () => {
+    await replaceOfflineTerminals('u1', rows);
+
+    const filtered = await searchOffline('u1', {
+      ...baseState,
+      q: 'ferreteria',
+      filtros: { Zona: 'Sur' }
+    });
+    const withoutFilters = await searchOffline('u1', { ...baseState, q: 'ferreteria' });
+
+    expect(filtered.paginacion.total).toBe(0);
+    expect(withoutFilters.datos.map((row) => row.terminal)).toEqual(['00001234']);
+  });
+
+  it('abre la ficha completa y conserva identificadores como texto', async () => {
+    await replaceOfflineTerminals('u1', rows);
+
+    const terminal = await offlineTerminal('u1', '00001234');
+
+    expect(terminal?.terminal).toBe('00001234');
+    expect(typeof terminal?.terminal).toBe('string');
+    expect(terminal?.datos_excel.CodigoComercio).toBe('00077');
+    expect(terminal?.datos_excel.CampoDinamico).toBe('Referencia especial');
+  });
+
   it('aísla registros por usuario y los elimina al cerrar sesión', async () => {
-    await replaceOfflineTerminals('u1', rows); await replaceOfflineTerminals('u2', [rows[1]]);
-    expect((await searchOffline('u2', { ...state, q: '', filtros: {} })).paginacion.total).toBe(1);
+    await replaceOfflineTerminals('u1', rows);
+    await replaceOfflineTerminals('u2', [rows[1]]);
+
+    expect((await searchOffline('u2', baseState)).paginacion.total).toBe(1);
     await clearUserData('u1');
-    expect((await searchOffline('u1', { ...state, q: '', filtros: {} })).paginacion.total).toBe(0);
-    expect((await searchOffline('u2', { ...state, q: '', filtros: {} })).paginacion.total).toBe(1);
+    expect((await searchOffline('u1', baseState)).paginacion.total).toBe(0);
+    expect((await searchOffline('u2', baseState)).paginacion.total).toBe(1);
   });
 });

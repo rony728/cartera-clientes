@@ -35,4 +35,12 @@ El frontend se publica automáticamente en GitHub Pages desde `main`. La configu
 5. Verificar que logout borra la copia local y que `USUARIO` no ve inactivas ni administración.
 6. Probar permisos denegados, selección de cámara y lectura QR/código en HTTPS.
 
+## Consulta sin conexión
+
+La búsqueda offline procesa la copia completa asociada al usuario en IndexedDB. Busca por coincidencia parcial en Terminal y en los valores comerciales —incluidos campos dinámicos— sin distinguir mayúsculas, minúsculas ni tildes. Los nombres internos de las propiedades no cuentan como coincidencias.
+
+Los filtros, estado, orden y paginación se aplican sobre los registros locales. Las opciones de filtro también se derivan de la copia completa, sin consultar la API. Si una búsqueda conserva filtros en la URL, la pantalla muestra cuántos están activos y permite limpiarlos para distinguir un término ausente de una coincidencia excluida por filtros.
+
+Para verificar una copia descargada, desconecta la red y prueba al menos una Terminal conocida y coincidencias parciales de Nombre comercial, Código de comercio, Serie POS e Inventario. Abre después la ficha para confirmar que sus campos dinámicos están disponibles.
+
 Consulta [../../docs/frontend-architecture.md](../../docs/frontend-architecture.md) para contratos, seguridad y limitaciones.

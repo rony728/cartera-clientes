@@ -12,6 +12,8 @@ Online, cada búsqueda consulta PostgreSQL con páginas de 20, debounce de 300 m
 
 IndexedDB separa terminales, preferencias y autorización por usuario. El acceso offline dura 24 horas desde la última autorización online. Logout elimina los datos de ese usuario. Offline es de solo lectura: edición, historial remoto, dashboard, usuarios y sincronización requieren conexión. Hoy se usa descarga completa consistente; la sincronización incremental queda pendiente.
 
+La consulta offline recorre todos los registros de la copia local y aplica primero estado, búsqueda y filtros, luego orden y paginación. La búsqueda general examina Terminal y valores comerciales, nunca nombres de propiedades; normaliza mayúsculas y tildes, conserva identificadores como texto y admite nombres de campo equivalentes con diferencias de espacios o acentos. Las opciones de filtros y columnas se obtienen de IndexedDB cuando no hay conexión. Los filtros persistidos en la URL se muestran con un contador y pueden limpiarse desde el estado vacío. Las fichas completas se resuelven directamente por Terminal desde IndexedDB.
+
 El service worker precachea el shell y dependencias locales. Las llamadas `/api/` son `NetworkOnly` para no guardar respuestas autenticadas en Cache Storage.
 
 ## Edición, historial y Excel
@@ -46,5 +48,5 @@ El endpoint de filtros devuelve `datos` con valores distintos autorizados y `cam
 
 - Fotografías y linterna no tienen integración productiva.
 - Campos distintos de `Celular` no tienen transporte Power Automate.
-- Las pruebas PostgreSQL reales y pruebas físicas de cámara/offline no se ejecutaron en Windows; deben repetirse en la base aislada y dispositivos objetivo.
+- Las pruebas PostgreSQL reales y pruebas físicas de cámara no se ejecutaron en Windows; deben repetirse en la base aislada y dispositivos objetivo. La búsqueda, paginación y apertura de fichas offline sí se cubren con IndexedDB simulado, incluida una copia sintética de 1,000 registros.
 - Se prepara el build, pero no se despliega ni cambia Cloudflare, PM2 o Ubuntu.
