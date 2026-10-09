@@ -247,6 +247,8 @@ npm audit --omit=dev
 
 Las pruebas usan fixtures sintéticas y dependencias PostgreSQL simuladas; no modifican producción ni envían correos. Antes de habilitar `SNAPSHOT_IMPORT_ENABLED` en Ubuntu se debe validar `SNAPSHOT_RECORDS_PATH` con el archivo real, ejecutar las pruebas de integración contra una base aislada y completar autenticación administrativa. La resolución manual de conflictos todavía no está implementada.
 
+La suite PostgreSQL real y el validador de snapshot se documentan en [../../docs/integration-testing.md](../../docs/integration-testing.md). Estas herramientas exigen una base separada, rechazan expresamente las bases de producción y no envían correo.
+
 ## Autenticación y autorización
 
 La PWA utilizará una sesión opaca almacenada en PostgreSQL y una cookie `HttpOnly`; no debe almacenar credenciales, sesiones ni API keys en `localStorage` o IndexedDB. Las contraseñas se procesan con Argon2id.
