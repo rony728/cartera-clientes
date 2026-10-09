@@ -124,7 +124,7 @@ test('importación inicial persiste texto, ceros, JSONB, historial y contadores'
 });
 
 test('sincronizaciones posteriores no duplican y registran cambios dinámicos e inactivación/reactivación', async () => {
-  await importer(syntheticSnapshot([
+  const initial = await importer(syntheticSnapshot([
     { Terminal: '001', Inventario: 'A', SeriePOS: 'S1', Nullable: null, ItemInternalId: 't1' },
     { Terminal: '002', Inventario: 'B', SeriePOS: 'S2' }
   ]));
@@ -134,6 +134,10 @@ test('sincronizaciones posteriores no duplican y registran cambios dinámicos e 
   ]));
   assert.equal(identical.sin_cambios, 2);
   assert.equal((await pool.query('SELECT count(*)::int AS total FROM public.terminales')).rows[0].total, 2);
+  assert.equal((await pool.query({
+    text: 'SELECT count(*)::int AS total FROM public.historial_cambios WHERE sincronizacion_id = $1',
+    values: [identical.id]
+  })).rows[0].total, 0);
 
   const changed = await importer(syntheticSnapshot([
     { Terminal: '001', Inventario: 'A2', SeriePOS: 'S1-N', ColumnaNueva: 'valor' },
@@ -152,6 +156,15 @@ test('sincronizaciones posteriores no duplican y registran cambios dinámicos e 
     valor_anterior_presente: true,
     valor_nuevo_presente: false
   });
+  const changedFields = await pool.query({
+    text: `SELECT campo FROM public.historial_cambios
+      WHERE sincronizacion_id = $1 AND terminal = '001'
+      ORDER BY campo`,
+    values: [changed.id]
+  });
+  assert.deepEqual(changedFields.rows.map((row) => row.campo), [
+    'ColumnaNueva', 'Inventario', 'Nullable', 'SeriePOS'
+  ]);
   assert.equal((await pool.query("SELECT activa FROM public.terminales WHERE terminal = '002'")).rows[0].activa, false);
 
   const reactivated = await importer(syntheticSnapshot([
@@ -161,8 +174,22 @@ test('sincronizaciones posteriores no duplican y registran cambios dinámicos e 
   ]));
   assert.equal(reactivated.reactivados, 1);
   assert.equal((await pool.query("SELECT activa FROM public.terminales WHERE terminal = '002'")).rows[0].activa, true);
-  assert.equal((await pool.query(`SELECT count(*)::int AS total FROM public.historial_cambios
-    WHERE terminal = '001' AND campo IN ('Inventario', 'SeriePOS', 'ColumnaNueva', 'Nullable')`)).rows[0].total, 4);
+  assert.equal((await pool.query({
+    text: `SELECT count(*)::int AS total FROM public.historial_cambios
+      WHERE sincronizacion_id = $1 AND terminal = '001'`,
+    values: [reactivated.id]
+  })).rows[0].total, 0);
+  assert.equal((await pool.query({
+    text: `SELECT count(*)::int AS total FROM public.historial_cambios
+      WHERE sincronizacion_id = $1 AND terminal = '002' AND campo = '__estado_terminal__'`,
+    values: [reactivated.id]
+  })).rows[0].total, 1);
+  assert.equal((await pool.query({
+    text: `SELECT count(*)::int AS total FROM public.historial_cambios
+      WHERE terminal = '001' AND campo IN ('Inventario', 'SeriePOS', 'ColumnaNueva', 'Nullable')
+        AND sincronizacion_id IN ($1, $2)`,
+    values: [initial.id, changed.id]
+  })).rows[0].total, 7);
 });
 
 test('cola real confirma, conserva pendientes/antiguas/superadas y evita conflictos duplicados', async () => {
