@@ -1,3 +1,5 @@
+const os = require('node:os');
+const path = require('node:path');
 const { parseAllowedOrigins } = require('./auth/cors');
 
 function parsePositiveInteger(value, name, defaultValue, minimum = 1) {
@@ -107,7 +109,7 @@ function loadServerConfig(env = process.env) {
     port,
     sessionSecret,
     snapshotConfig: {
-      filePath: env.SNAPSHOT_PATH || '/ruta/privada/cartera-snapshot/snapshot.json',
+      filePath: env.SNAPSHOT_PATH || path.join(os.homedir(), 'cartera-snapshot', 'snapshot.json'),
       recordsPath: env.SNAPSHOT_RECORDS_PATH || '',
       maxBytes: maxSnapshotBytes
     },

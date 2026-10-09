@@ -34,7 +34,7 @@ LOGIN_BLOCK_SECONDS=900
 
 Genera `SESSION_SECRET` directamente en Ubuntu y guárdalo solo en `.env`. En producción la API se niega a arrancar con `COOKIE_SECURE=false`. `COOKIE_SAME_SITE=none` se permite únicamente junto con cookies seguras; úsalo cuando PWA y API sean sitios diferentes y confirma la política definitiva de dominios. `CORS_ORIGINS` acepta una lista exacta separada por comas y nunca debe contener `*` cuando se usan credenciales.
 
-Cloudflare termina HTTPS y el túnel existente reenvía a `127.0.0.1:3005`. La aplicación exige `HOST=127.0.0.1` y `TRUST_PROXY=1` en producción. `express-session` usa el protocolo reconocido por Express y no confía directamente en `X-Forwarded-Proto`.
+El proxy HTTPS reenvía a la interfaz local de la API. La aplicación exige `HOST=127.0.0.1` y una configuración explícita de `TRUST_PROXY` en producción. `express-session` usa el protocolo reconocido por Express y no confía directamente en `X-Forwarded-Proto`.
 
 ## Primer administrador
 

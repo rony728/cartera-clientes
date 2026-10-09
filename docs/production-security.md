@@ -2,7 +2,7 @@
 
 ## Infraestructura existente
 
-La API pública utiliza `https://api-cartera.rtdev.uk`. Cloudflare termina HTTPS y el túnel existente reenvía hacia `http://127.0.0.1:3005`. El nombre del proceso PM2 se configura en el servidor.
+La API pública utiliza `https://api-cartera.rtdev.uk`. El proxy HTTPS reenvía hacia la API enlazada exclusivamente a la interfaz local.
 
 Este procedimiento no crea túneles, no modifica DNS o credenciales de Cloudflare, no abre el puerto 3005, no ejecuta migraciones y no cambia PostgreSQL. La API debe seguir enlazada exclusivamente a `127.0.0.1`.
 
@@ -10,7 +10,7 @@ El origen previsto para la PWA es `https://cartera.rtdev.uk`. Debe confirmarse a
 
 ## Archivo `.env` completo para Ubuntu
 
-Conserva este archivo únicamente en `/ruta/al/repositorio/apps/api/.env`, con permisos privados. Sustituye todos los valores `REEMPLAZAR_*`; no los confirmes en Git.
+Conserva este archivo únicamente en `apps/api/.env` dentro del despliegue, con permisos privados. Sustituye todos los valores `REEMPLAZAR_*`; no los confirmes en Git.
 
 ```dotenv
 NODE_ENV=production

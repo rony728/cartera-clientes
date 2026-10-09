@@ -63,7 +63,7 @@ No ejecutes este comando si la base contiene información que quieras conservar.
 
 ## Validación de solo lectura del snapshot real
 
-En Ubuntu, el valor predeterminado es `/ruta/privada/cartera-snapshot/snapshot.json`:
+En Ubuntu, configura una ruta privada fuera del repositorio para el snapshot:
 
 ```sh
 npm run snapshot:validate

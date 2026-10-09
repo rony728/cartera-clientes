@@ -164,7 +164,7 @@ SNAPSHOT_MAX_BYTES=10485760
 ```
 
 - `SNAPSHOT_IMPORT_ENABLED` debe permanecer en `false` hasta implementar y validar autorización administrativa real.
-- `SNAPSHOT_PATH` tiene como valor recomendado en Ubuntu `/ruta/privada/cartera-snapshot/snapshot.json`.
+- `SNAPSHOT_PATH` debe apuntar a una ubicación privada fuera del repositorio.
 - Si el nivel raíz del JSON es un arreglo, `SNAPSHOT_RECORDS_PATH` queda vacío. Si está anidado, configura una ruta por puntos, por ejemplo `value` o `data.items`.
 - `SNAPSHOT_MAX_BYTES` limita el tamaño leído; el valor predeterminado es 10 MiB.
 

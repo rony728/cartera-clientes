@@ -1,4 +1,6 @@
 const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 require('dotenv').config();
 
 const { parseSnapshot } = require('../src/sincronizaciones/snapshot');
@@ -17,7 +19,7 @@ const SAFE_ERRORS = Object.freeze({
 
 async function main() {
   const filePath = process.env.SNAPSHOT_VALIDATE_PATH
-    || '/ruta/privada/cartera-snapshot/snapshot.json';
+    || path.join(os.homedir(), 'cartera-snapshot', 'snapshot.json');
   const maxBytes = Number.parseInt(process.env.SNAPSHOT_MAX_BYTES || '10485760', 10);
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
     throw new Error('SNAPSHOT_MAX_BYTES debe ser un entero positivo.');
