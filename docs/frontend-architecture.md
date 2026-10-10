@@ -6,6 +6,8 @@ La pantalla inicial autenticada es Comercios. Móvil usa navegación inferior y 
 
 La autenticación usa cookie `HttpOnly`, `Secure`, `SameSite=Lax`, `credentials: include` y CSRF conservado solo en memoria. No se almacenan contraseñas, cookies, API keys ni CSRF. La sesión del servidor dura siete días y sigue siendo revocable.
 
+La URL de Comercios es la fuente de verdad para búsqueda, campo, filtros, estado, orden, dirección y página. Al abrir una ficha, el frontend asocia el desplazamiento vertical a una clave canónica de esos parámetros. Esa referencia viaja por ficha y edición y también queda en la entrada actual del historial para soportar Atrás/Adelante. La lista restaura después de tener resultados y únicamente ante coincidencia exacta; un contexto diferente elimina el marcador. No se persiste esta información en servidor ni IndexedDB.
+
 ## Datos online y offline
 
 Online, cada búsqueda consulta PostgreSQL con páginas de 20, debounce de 300 ms, filtros y orden servidor; TanStack Query cancela respuestas obsoletas. La preparación offline descarga páginas de 100 y reemplaza IndexedDB solo tras completarse, conservando la copia anterior ante fallos.
@@ -13,6 +15,8 @@ Online, cada búsqueda consulta PostgreSQL con páginas de 20, debounce de 300 m
 IndexedDB separa terminales, preferencias y autorización por usuario. El acceso offline dura 24 horas desde la última autorización online. Logout elimina los datos de ese usuario. Offline es de solo lectura: edición, historial remoto, dashboard, usuarios y sincronización requieren conexión. Hoy se usa descarga completa consistente; la sincronización incremental queda pendiente.
 
 La consulta offline recorre todos los registros de la copia local y aplica primero estado, búsqueda y filtros, luego orden y paginación. La búsqueda general examina Terminal y valores comerciales, nunca nombres de propiedades; normaliza mayúsculas y tildes, conserva identificadores como texto y admite nombres de campo equivalentes con diferencias de espacios o acentos. Las opciones de filtros y columnas se obtienen de IndexedDB cuando no hay conexión. Los filtros persistidos en la URL se muestran con un contador y pueden limpiarse desde el estado vacío. Las fichas completas se resuelven directamente por Terminal desde IndexedDB.
+
+La normalización de categorías es una capa de presentación y comparación: recorta espacios externos, compara sin distinguir mayúsculas/minúsculas y agrupa equivalencias seguras. Nunca reescribe `datos_excel`. Offline compara la clave normalizada. Online, como la API conserva filtros exactos, el adaptador consulta cada variante observada, deduplica por Terminal, ordena y pagina en memoria. Así se mantiene el contrato, con el costo documentado de lecturas adicionales cuando un grupo tiene variantes.
 
 TanStack Query trata las lecturas de IndexedDB como operaciones independientes de red (`networkMode: always`). Sin esa opción, su gestor de conectividad pausa también funciones locales y una consulta pendiente podía interpretarse erróneamente como un arreglo vacío. Las consultas de lista, filtros y detalle separan su caché por `user.id` y modo de conexión, por lo que una respuesta online fallida no reemplaza datos locales ni se comparten resultados entre usuarios. Los estados visuales distinguen carga, error de IndexedDB y cero coincidencias.
 
@@ -54,3 +58,4 @@ El endpoint de filtros devuelve `datos` con valores distintos autorizados y `cam
 - No se ha ejecutado desde este repositorio una prueba funcional extremo a extremo con el flujo y Excel reales; la aceptación de Graph no la sustituye.
 - Las pruebas PostgreSQL reales y pruebas físicas de cámara no se ejecutaron en Windows; deben repetirse en la base aislada y dispositivos objetivo. La transición completa online → offline → online, búsqueda, paginación y apertura de fichas sí se cubren con los componentes React, `AuthProvider`, cliente API, TanStack Query e IndexedDB simulado, incluida una copia sintética de 1,000 registros.
 - Se prepara el build, pero no se despliega ni cambia Cloudflare, PM2 o Ubuntu.
+- No hay Playwright ni infraestructura E2E visual en el repositorio. La responsividad se protege con estructura CSS y pruebas de comportamiento, pero los anchos 360/390/430/768/1366, teclado virtual, áreas seguras, selección por pulsación prolongada y gestos deben confirmarse manualmente en dispositivos/navegadores objetivo.

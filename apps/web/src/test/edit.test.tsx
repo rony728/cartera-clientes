@@ -5,6 +5,7 @@ import { MemoryRouter,Route,Routes,useLocation } from 'react-router-dom';
 import { describe,expect,it,vi } from 'vitest';
 import Edit from '../pages/Edit';
 import type { Terminal } from '../types';
+import type { CommerceRouteState } from '../navigation';
 
 const mocks=vi.hoisted(()=>({api:vi.fn()}));
 vi.mock('../api',()=>({
@@ -19,12 +20,13 @@ const terminal:Terminal={
 
 function Result(){
  const location=useLocation();
- return <p>{(location.state as {message?:string}|null)?.message}</p>;
+ const state=location.state as CommerceRouteState|null;
+ return <><p>{state?.message}</p><output aria-label="Posición de retorno">{state?.restoreScroll?`${state.restoreScroll.key}:${state.restoreScroll.y}`:''}</output></>;
 }
 
-function renderEdit(){
+function renderEdit(state?:CommerceRouteState){
  const queryClient=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});
- return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={['/comercios/00000284/editar']}><Routes>
+ return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[{pathname:'/comercios/00000284/editar',state}]}><Routes>
   <Route path="/comercios/:terminal/editar" element={<Edit/>}/>
   <Route path="/comercios/:terminal" element={<Result/>}/>
  </Routes></MemoryRouter></QueryClientProvider>);
@@ -65,5 +67,14 @@ describe('edición y propagación V2',()=>{
   const [,options]=mocks.api.mock.calls[1] as [string,RequestInit];
   expect(JSON.parse(String(options.body))).toEqual({version:'7',cambios:{NombreComercial:'Nuevo nombre',Celular:''}});
   expect(await screen.findByText('Guardado en PostgreSQL y enviado para conciliación con Excel.')).toBeInTheDocument();
+ });
+
+ it('conserva el contexto y el scroll al cancelar la edición',async()=>{
+  mocks.api.mockResolvedValue(terminal);
+  const user=userEvent.setup();
+  renderEdit({search:'?campo=NombreComercial&q=original&pagina=2',restoreScroll:{key:'campo=NombreComercial&pagina=2&q=original',y:640}});
+  await screen.findByRole('textbox',{name:'Nombre comercial'});
+  await user.click(screen.getByRole('link',{name:'Cancelar'}));
+  expect(screen.getByRole('status',{name:'Posición de retorno'})).toHaveTextContent('campo=NombreComercial&pagina=2&q=original:640');
  });
 });

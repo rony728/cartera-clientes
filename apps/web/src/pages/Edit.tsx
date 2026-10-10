@@ -4,6 +4,7 @@ import { Link,useLocation,useNavigate,useParams } from 'react-router-dom';
 import { api,ApiError } from '../api';
 import { EDITABLE_FIELDS,INTERNAL_FIELDS,metaFor } from '../fields';
 import type { Terminal } from '../types';
+import type { CommerceRouteState } from '../navigation';
 
 interface UpdateResponse { terminal:Terminal;propagacion:{campo:string;estado:string}[];envio_excel:{estado:string;campos:string[]} }
 const PRIMARY_EDIT_FIELDS=['NombreComercial','SeriePOS','Atendio','Celular','Correo','RedSimcard','SerieSimcard'];
@@ -19,7 +20,7 @@ const EDIT_GROUPS=[
 
 export default function Edit(){
  const{terminal=''}=useParams(),nav=useNavigate(),location=useLocation(),client=useQueryClient();
- const search=(location.state as {search?:string}|null)?.search||'';
+ const routeState=location.state as CommerceRouteState|null,search=routeState?.search||'',restoreScroll=routeState?.restoreScroll;
  const[values,setValues]=useState<Record<string,unknown>>({}),[conflict,setConflict]=useState<Terminal|null>(null);
  const query=useQuery({queryKey:['terminal',terminal,false],queryFn:()=>api<Terminal>(`/api/v1/terminales/${encodeURIComponent(terminal)}`)});
  useEffect(()=>{if(query.data)setValues(query.data.datos_excel);},[query.data]);
@@ -29,7 +30,7 @@ export default function Edit(){
  const detail=`/comercios/${encodeURIComponent(terminal)}`;
  const mutation=useMutation({
   mutationFn:()=>api<UpdateResponse>(`/api/v1/terminales/${encodeURIComponent(terminal)}`,{method:'PATCH',body:JSON.stringify({version:query.data!.version,cambios:changes})}),
-  onSuccess:async data=>{client.setQueryData(['terminal',terminal,false],data.terminal);await client.invalidateQueries({queryKey:['terminales']});const state=data.envio_excel.estado;const message=state==='ERROR'?'Guardado en PostgreSQL; falló el envío de la actualización a Excel.':state==='INCIERTO'?'Guardado en PostgreSQL; Microsoft Graph aceptó el envío, pero su registro quedó incierto.':state==='PENDIENTE'?'Guardado en PostgreSQL; el envío a Excel no pudo iniciarse y permanece pendiente.':'Guardado en PostgreSQL y enviado para conciliación con Excel.';nav(detail,{replace:true,state:{message,search}});},
+  onSuccess:async data=>{client.setQueryData(['terminal',terminal,false],data.terminal);await client.invalidateQueries({queryKey:['terminales']});const state=data.envio_excel.estado;const message=state==='ERROR'?'Guardado en PostgreSQL; falló el envío de la actualización a Excel.':state==='INCIERTO'?'Guardado en PostgreSQL; Microsoft Graph aceptó el envío, pero su registro quedó incierto.':state==='PENDIENTE'?'Guardado en PostgreSQL; el envío a Excel no pudo iniciarse y permanece pendiente.':'Guardado en PostgreSQL y enviado para conciliación con Excel.';nav(detail,{replace:true,state:{message,search,restoreScroll}});},
   onError:error=>{if(error instanceof ApiError&&error.status===409&&(error.data as {codigo?:string})?.codigo==='VERSION_CONFLICT')setConflict((error.data as {terminal:Terminal}).terminal);}
  });
  function submit(event:FormEvent){event.preventDefault();if(dirty&&!mutation.isPending)mutation.mutate();}
@@ -46,7 +47,7 @@ export default function Edit(){
   {conflict&&<div className="alert error"><strong>Conflicto de versión.</strong><p>Otra persona modificó esta terminal. Tus cambios permanecen en pantalla; compara antes de recargar.</p><div className="conflict-grid">{Object.entries(changes).map(([field,local])=><div key={field}><b>{metaFor(field).label}</b><span>Tu valor: {String(local??'')}</span><span>Actual: {String(conflict.datos_excel[field]??'')}</span></div>)}</div><button type="button" onClick={()=>{setConflict(null);void query.refetch();}}>Descartar edición local y recargar</button></div>}
   <fieldset className="edit-section primary-edit-section"><legend>Datos principales</legend><div className="form-grid">{primaryFields.map(field=><EditField key={field} field={field} value={values[field]} editable={EDITABLE_FIELDS.has(field)} onChange={value=>setField(field,value)}/>)}</div></fieldset>
   <div className="edit-sections">{EDIT_GROUPS.map(group=>{const grouped=secondaryFields.filter(field=>group.matches(field));if(!grouped.length)return null;return <fieldset className="edit-section" key={group.name}><legend>{group.name}</legend><div className="form-grid">{grouped.map(field=><EditField key={field} field={field} value={values[field]} editable={EDITABLE_FIELDS.has(field)} onChange={value=>setField(field,value)}/>)}</div></fieldset>;})}</div>
-  <div className="sticky-actions" aria-label="Acciones de edición"><Link className="button" to={detail} state={{search}}>Cancelar</Link><button className="primary" disabled={!dirty||mutation.isPending}>{mutation.isPending?'Guardando…':'Guardar cambios'}</button></div>
+  <div className="sticky-actions" aria-label="Acciones de edición"><Link className="button" to={detail} state={{search,restoreScroll}}>Cancelar</Link><button className="primary" disabled={!dirty||mutation.isPending}>{mutation.isPending?'Guardando…':'Guardar cambios'}</button></div>
  </form>;
 }
 

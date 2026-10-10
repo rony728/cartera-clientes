@@ -1,10 +1,11 @@
 import { QueryClient,QueryClientProvider } from '@tanstack/react-query';
-import { render,screen,waitFor } from '@testing-library/react';
+import { act,render,screen,waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { Link,MemoryRouter,Route,Routes,useLocation,type InitialEntry } from 'react-router-dom';
 import { beforeEach,describe,expect,it,vi } from 'vitest';
 import Commerce from '../pages/Commerce';
 import type { SearchState,Terminal } from '../types';
+import type { CommerceRouteState } from '../navigation';
 
 const mocks=vi.hoisted(()=>({
  searchTerminals:vi.fn(),
@@ -28,9 +29,19 @@ vi.mock('../export',()=>({exportTerminals:vi.fn()}));
 const terminal:Terminal={terminal:'00001234',activa:true,version:'1',datos_excel:{NombreComercial:'Café Central',SeriePOS:'SER-0007',Inventario:'INV-0042',Ciudad:'Danlí',CodigoComercio:''}};
 const page={datos:[terminal],paginacion:{pagina:1,limite:20,total:1,total_paginas:2}};
 
-function renderCommerce(entry='/comercios'){
+function renderCommerce(entry:InitialEntry='/comercios'){
  const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
  return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[entry]}><Commerce/></MemoryRouter></QueryClientProvider>);
+}
+
+function DetailReturn(){
+ const state=useLocation().state as CommerceRouteState;
+ return <><p>Ficha abierta</p><Link to={`/comercios${state.search}`} state={{restoreScroll:state.restoreScroll}}>Volver al contexto exacto</Link><Link to="/comercios?q=otro" state={{restoreScroll:state.restoreScroll}}>Volver a otro contexto</Link></>;
+}
+
+function renderNavigation(entry:InitialEntry){
+ const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+ return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[entry]}><Routes><Route path="/comercios" element={<Commerce/>}/><Route path="/comercios/:terminal" element={<DetailReturn/>}/></Routes></MemoryRouter></QueryClientProvider>);
 }
 
 describe('interfaz de Comercios',()=>{
@@ -42,6 +53,7 @@ describe('interfaz de Comercios',()=>{
   mocks.getColumns.mockReset().mockResolvedValue(['Inventario','SeriePOS']);
   mocks.saveColumns.mockReset().mockResolvedValue(undefined);
   mocks.offline=false;
+  Object.defineProperty(window,'scrollY',{configurable:true,value:0});
   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:mocks.writeText}});
  });
 
@@ -169,5 +181,26 @@ describe('interfaz de Comercios',()=>{
   expect(writeText).toHaveBeenCalledWith('00001234');
   expect(screen.getByRole('status')).toHaveTextContent('Terminal: No se pudo copiar');
   expect(screen.getByRole('heading',{name:'Café Central'})).toBeInTheDocument();
+ });
+
+ it('restaura el scroll al volver al contexto exacto de búsqueda',async()=>{
+  const user=userEvent.setup(),scrollTo=vi.spyOn(window,'scrollTo').mockImplementation(()=>undefined);
+  Object.defineProperty(window,'scrollY',{configurable:true,value:486});
+  renderNavigation('/comercios?pagina=2&campo=NombreComercial&q=Caf%C3%A9');
+  await user.click(await screen.findByRole('link',{name:'Café Central'}));
+  expect(screen.getByText('Ficha abierta')).toBeInTheDocument();
+  await user.click(screen.getByRole('link',{name:'Volver al contexto exacto'}));
+  await waitFor(()=>expect(scrollTo).toHaveBeenCalledWith({top:486,left:0,behavior:'auto'}));
+ });
+
+ it('descarta una posición guardada si cambió el contexto de búsqueda',async()=>{
+  const user=userEvent.setup();
+  const scrollTo=vi.spyOn(window,'scrollTo').mockImplementation(()=>undefined);
+  renderCommerce({pathname:'/comercios',search:'?q=otro',state:{restoreScroll:{key:'q=anterior',y:900}}});
+  await screen.findByRole('link',{name:'Café Central'});
+  const search=screen.getByRole('textbox',{name:'Buscar comercios'});
+  await user.clear(search);await user.type(search,'anterior');
+  await act(async()=>{await new Promise(resolve=>window.setTimeout(resolve,350));});
+  expect(scrollTo).not.toHaveBeenCalled();
  });
 });
