@@ -14,6 +14,10 @@ IndexedDB separa terminales, preferencias y autorización por usuario. El acceso
 
 La consulta offline recorre todos los registros de la copia local y aplica primero estado, búsqueda y filtros, luego orden y paginación. La búsqueda general examina Terminal y valores comerciales, nunca nombres de propiedades; normaliza mayúsculas y tildes, conserva identificadores como texto y admite nombres de campo equivalentes con diferencias de espacios o acentos. Las opciones de filtros y columnas se obtienen de IndexedDB cuando no hay conexión. Los filtros persistidos en la URL se muestran con un contador y pueden limpiarse desde el estado vacío. Las fichas completas se resuelven directamente por Terminal desde IndexedDB.
 
+TanStack Query trata las lecturas de IndexedDB como operaciones independientes de red (`networkMode: always`). Sin esa opción, su gestor de conectividad pausa también funciones locales y una consulta pendiente podía interpretarse erróneamente como un arreglo vacío. Las consultas de lista, filtros y detalle separan su caché por `user.id` y modo de conexión, por lo que una respuesta online fallida no reemplaza datos locales ni se comparten resultados entre usuarios. Los estados visuales distinguen carga, error de IndexedDB y cero coincidencias.
+
+`AuthProvider` canoniza `user.id` como texto, vuelve a leer la autorización local al recibir el evento `offline` y descarta transiciones asíncronas obsoletas cuando la conectividad cambia rápidamente. IndexedDB usa el mismo identificador textual en autorización, metadatos, preferencias, índice `userId` y claves compuestas. Una autorización local vencida devuelve al inicio de sesión sin borrar automáticamente la cartera; solo logout elimina los datos del usuario.
+
 El service worker precachea el shell y dependencias locales. Las llamadas `/api/` son `NetworkOnly` para no guardar respuestas autenticadas en Cache Storage.
 
 ## Edición, historial y Excel
@@ -48,5 +52,5 @@ El endpoint de filtros devuelve `datos` con valores distintos autorizados y `cam
 
 - Fotografías y linterna no tienen integración productiva.
 - Campos distintos de `Celular` no tienen transporte Power Automate.
-- Las pruebas PostgreSQL reales y pruebas físicas de cámara no se ejecutaron en Windows; deben repetirse en la base aislada y dispositivos objetivo. La búsqueda, paginación y apertura de fichas offline sí se cubren con IndexedDB simulado, incluida una copia sintética de 1,000 registros.
+- Las pruebas PostgreSQL reales y pruebas físicas de cámara no se ejecutaron en Windows; deben repetirse en la base aislada y dispositivos objetivo. La transición completa online → offline → online, búsqueda, paginación y apertura de fichas sí se cubren con los componentes React, `AuthProvider`, cliente API, TanStack Query e IndexedDB simulado, incluida una copia sintética de 1,000 registros.
 - Se prepara el build, pero no se despliega ni cambia Cloudflare, PM2 o Ubuntu.

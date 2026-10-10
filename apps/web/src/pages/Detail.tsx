@@ -15,11 +15,12 @@ export default function Detail(){
  const routeState=location.state as {search?:string;message?:string}|null;
  const search=routeState?.search||'';
  const[copied,setCopied]=useState(''),[historyPage,setHistoryPage]=useState(1);
- const query=useQuery({queryKey:['terminal',terminal,offline],queryFn:()=>offline?offlineTerminal(user!.id,terminal):api<Terminal>(`/api/v1/terminales/${encodeURIComponent(terminal)}`)});
+ const query=useQuery({queryKey:['terminal',user?.id,terminal,offline],queryFn:()=>offline?offlineTerminal(user!.id,terminal):api<Terminal>(`/api/v1/terminales/${encodeURIComponent(terminal)}`),networkMode:offline?'always':'online'});
  const history=useQuery({queryKey:['history',terminal,historyPage],queryFn:()=>api<Page<HistoryEntry>>(`/api/v1/terminales/${encodeURIComponent(terminal)}/historial?pagina=${historyPage}&limite=20`),enabled:!offline});
  const t=query.data;
  async function copy(key:string,value:unknown){await navigator.clipboard.writeText(String(value??''));setCopied(key);setTimeout(()=>setCopied(''),1400);}
- if(query.isLoading)return <div className="splash">Cargando ficha…</div>;
+ if(query.isPending)return <div className="splash">Cargando ficha…</div>;
+ if(query.isError)return <div className="empty" role="alert"><h1>{offline?'Error al leer la ficha local':'No fue posible cargar la ficha'}</h1><p>{offline?'IndexedDB no pudo entregar este registro. La copia local se conserva.':'No se pudo completar la consulta en línea.'}</p><button onClick={()=>query.refetch()}>Reintentar</button></div>;
  if(!t)return <div className="empty"><h1>Terminal no disponible</h1><Link to={`/comercios${search}`}>Volver</Link></div>;
  const entries=Object.entries(t.datos_excel).filter(([k])=>!INTERNAL_FIELDS.has(k));
  return <section><div className="detail-head"><Link to={`/comercios${search}`}>← Comercios</Link><div><p className="eyebrow">Terminal {t.terminal}</p><h1>{String(excelValue(t.datos_excel,'NombreComercial')||'Comercio sin nombre')}</h1><span className={`badge ${t.activa?'success':'muted'}`}>{t.activa?'Activa':'Inactiva'}</span></div>{t.activa&&!offline&&<Link className="button primary" to="editar" state={{search}}>Editar comercio</Link>}</div>

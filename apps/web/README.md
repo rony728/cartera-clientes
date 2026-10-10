@@ -41,6 +41,10 @@ La búsqueda offline procesa la copia completa asociada al usuario en IndexedDB.
 
 Los filtros, estado, orden y paginación se aplican sobre los registros locales. Las opciones de filtro también se derivan de la copia completa, sin consultar la API. Si una búsqueda conserva filtros en la URL, la pantalla muestra cuántos están activos y permite limpiarlos para distinguir un término ausente de una coincidencia excluida por filtros.
 
+Las consultas locales de TanStack Query usan modo de red `always`: deben ejecutarse aunque el navegador y el propio cliente de consultas estén marcados sin conexión. Las claves de caché incluyen el usuario y el modo online/offline. El identificador de usuario se canoniza como texto antes de construir claves como `1:00000284` o consultar el índice `userId`; la autorización local se vuelve a comprobar al producirse la desconexión y una autorización vencida no habilita la cartera.
+
+La pantalla diferencia un resultado válido sin coincidencias de un fallo al leer IndexedDB. Un error local permite reintentar y no elimina la copia descargada.
+
 Para verificar una copia descargada, desconecta la red y prueba al menos una Terminal conocida y coincidencias parciales de Nombre comercial, Código de comercio, Serie POS e Inventario. Abre después la ficha para confirmar que sus campos dinámicos están disponibles.
 
 Consulta [../../docs/frontend-architecture.md](../../docs/frontend-architecture.md) para contratos, seguridad y limitaciones.

@@ -14,6 +14,11 @@ const dbPromise = openDB('cartera-clientes', 1, {
 
 const accessHours = Number(import.meta.env.VITE_OFFLINE_ACCESS_HOURS || 24);
 const collator = new Intl.Collator('es', { sensitivity: 'base', numeric: true });
+type UserIdentifier = string | number;
+
+function canonicalUserId(userId: UserIdentifier) {
+  return String(userId);
+}
 
 export function normalizeOfflineText(value: unknown) {
   return String(value ?? '')
@@ -51,50 +56,61 @@ function terminalSearchValues(terminal: Terminal) {
 
 export async function saveOfflineAuth(user: User) {
   const db = await dbPromise;
+  const normalizedUser = { ...user, id: canonicalUserId(user.id) };
   await db.put('meta', {
-    key: `auth:${user.id}`,
-    user,
+    key: `auth:${normalizedUser.id}`,
+    user: normalizedUser,
     authorizedUntil: Date.now() + accessHours * 3_600_000
   });
-  await db.put('meta', { key: 'lastUser', userId: user.id });
+  await db.put('meta', { key: 'lastUser', userId: normalizedUser.id });
 }
 
 export async function getOfflineAuth(): Promise<User | null> {
   const db = await dbPromise;
   const last = await db.get('meta', 'lastUser');
   if (!last) return null;
-  const auth = await db.get('meta', `auth:${last.userId}`);
-  return auth?.authorizedUntil > Date.now() ? auth.user : null;
+  const userId = canonicalUserId(last.userId);
+  const auth = await db.get('meta', `auth:${userId}`);
+  if (!auth?.user || auth.authorizedUntil <= Date.now()) return null;
+  return { ...auth.user, id: canonicalUserId(auth.user.id) };
 }
 
-export async function clearUserData(userId: string) {
+export async function clearUserData(userId: UserIdentifier) {
+  const normalizedUserId = canonicalUserId(userId);
   const db = await dbPromise;
   const tx = db.transaction(['terminales', 'meta', 'preferences'], 'readwrite');
-  let cursor = await tx.objectStore('terminales').index('userId').openCursor(IDBKeyRange.only(userId));
+  let cursor = await tx.objectStore('terminales').index('userId').openCursor(IDBKeyRange.only(normalizedUserId));
   while (cursor) {
     await cursor.delete();
     cursor = await cursor.continue();
   }
-  await tx.objectStore('meta').delete(`auth:${userId}`);
-  await tx.objectStore('preferences').delete(`columns:${userId}`);
+  await tx.objectStore('meta').delete(`auth:${normalizedUserId}`);
+  await tx.objectStore('preferences').delete(`columns:${normalizedUserId}`);
   const last = await tx.objectStore('meta').get('lastUser');
-  if (last?.userId === userId) await tx.objectStore('meta').delete('lastUser');
+  if (last && canonicalUserId(last.userId) === normalizedUserId) {
+    await tx.objectStore('meta').delete('lastUser');
+  }
   await tx.done;
 }
 
-export async function replaceOfflineTerminals(userId: string, rows: Terminal[]) {
+export async function replaceOfflineTerminals(userId: UserIdentifier, rows: Terminal[]) {
+  const normalizedUserId = canonicalUserId(userId);
   const db = await dbPromise;
   const tx = db.transaction(['terminales', 'meta'], 'readwrite');
-  let cursor = await tx.objectStore('terminales').index('userId').openCursor(IDBKeyRange.only(userId));
+  let cursor = await tx.objectStore('terminales').index('userId').openCursor(IDBKeyRange.only(normalizedUserId));
   while (cursor) {
     await cursor.delete();
     cursor = await cursor.continue();
   }
   for (const terminal of rows) {
-    await tx.objectStore('terminales').put({ key: `${userId}:${terminal.terminal}`, userId, ...terminal });
+    await tx.objectStore('terminales').put({
+      ...terminal,
+      key: `${normalizedUserId}:${terminal.terminal}`,
+      userId: normalizedUserId
+    });
   }
   await tx.objectStore('meta').put({
-    key: `sync:${userId}`,
+    key: `sync:${normalizedUserId}`,
     updatedAt: new Date().toISOString(),
     count: rows.length,
     complete: true
@@ -126,28 +142,28 @@ export async function downloadOffline(user: User, onProgress: (done: number, tot
   return rows.length;
 }
 
-export async function offlineMeta(userId: string) {
-  return (await dbPromise).get('meta', `sync:${userId}`);
+export async function offlineMeta(userId: UserIdentifier) {
+  return (await dbPromise).get('meta', `sync:${canonicalUserId(userId)}`);
 }
 
-export async function getColumns(userId: string, defaults: string[]) {
-  const preference = await (await dbPromise).get('preferences', `columns:${userId}`);
+export async function getColumns(userId: UserIdentifier, defaults: string[]) {
+  const preference = await (await dbPromise).get('preferences', `columns:${canonicalUserId(userId)}`);
   return preference?.columns || defaults;
 }
 
-export async function saveColumns(userId: string, columns: string[]) {
-  await (await dbPromise).put('preferences', { key: `columns:${userId}`, columns });
+export async function saveColumns(userId: UserIdentifier, columns: string[]) {
+  await (await dbPromise).put('preferences', { key: `columns:${canonicalUserId(userId)}`, columns });
 }
 
-export async function allOffline(userId: string): Promise<Terminal[]> {
-  return (await dbPromise).getAllFromIndex('terminales', 'userId', userId);
+export async function allOffline(userId: UserIdentifier): Promise<Terminal[]> {
+  return (await dbPromise).getAllFromIndex('terminales', 'userId', canonicalUserId(userId));
 }
 
-export async function offlineTerminal(userId: string, terminal: string): Promise<Terminal | undefined> {
-  return (await dbPromise).get('terminales', `${userId}:${terminal}`);
+export async function offlineTerminal(userId: UserIdentifier, terminal: string): Promise<Terminal | undefined> {
+  return (await dbPromise).get('terminales', `${canonicalUserId(userId)}:${terminal}`);
 }
 
-export async function offlineFilterOptions(userId: string) {
+export async function offlineFilterOptions(userId: UserIdentifier) {
   const rows = await allOffline(userId);
   const fields = Array.from(new Set(
     rows.flatMap((row) => Object.keys(row.datos_excel).filter((field) => !INTERNAL_FIELDS.has(field)))
@@ -163,7 +179,7 @@ export async function offlineFilterOptions(userId: string) {
   return { datos, campos: fields };
 }
 
-export async function searchOffline(userId: string, state: SearchState): Promise<Page<Terminal>> {
+export async function searchOffline(userId: UserIdentifier, state: SearchState): Promise<Page<Terminal>> {
   let rows = await allOffline(userId);
   const term = normalizeOfflineText(state.q);
 

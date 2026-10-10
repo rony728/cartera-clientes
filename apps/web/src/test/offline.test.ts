@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearUserData,
+  getOfflineAuth,
   offlineFilterOptions,
   offlineTerminal,
   replaceOfflineTerminals,
+  saveOfflineAuth,
   searchOffline
 } from '../offline';
 import type { SearchState, Terminal } from '../types';
@@ -65,6 +67,8 @@ beforeEach(async () => {
   await clearUserData('u1');
   await clearUserData('u2');
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('consulta offline', () => {
   it('encuentra un nombre comercial sin distinguir mayúsculas ni tildes', async () => {
@@ -210,5 +214,33 @@ describe('consulta offline', () => {
     await clearUserData('u1');
     expect((await searchOffline('u1', baseState)).paginacion.total).toBe(0);
     expect((await searchOffline('u2', baseState)).paginacion.total).toBe(1);
+  });
+
+  it('canoniza el identificador de usuario para las claves e índices de IndexedDB', async () => {
+    await replaceOfflineTerminals(1, [rows[0]]);
+
+    const result = await searchOffline('1', { ...baseState, q: '00001234' });
+    const detail = await offlineTerminal(1, '00001234');
+
+    expect(result.datos.map((row) => row.terminal)).toEqual(['00001234']);
+    expect(detail?.terminal).toBe('00001234');
+  });
+
+  it('rechaza una autorización local expirada sin eliminar la cartera descargada', async () => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    await saveOfflineAuth({
+      id: 'u1',
+      nombre: 'Usuario uno',
+      usuario: 'usuario.uno',
+      rol: 'USUARIO',
+      autenticado: true
+    });
+    await replaceOfflineTerminals('u1', [rows[0]]);
+    clock.mockReturnValue(now + 25 * 3_600_000);
+
+    expect(await getOfflineAuth()).toBeNull();
+    expect((await searchOffline('u1', baseState)).paginacion.total).toBe(1);
+    clock.mockRestore();
   });
 });
