@@ -65,7 +65,7 @@ El frontend debe enviar solicitudes con credenciales (`credentials: 'include'`).
 
 Los preflight admiten solamente `GET`, `POST`, `PATCH` y `OPTIONS`, y los encabezados `Content-Type`, `X-CSRF-Token` y `X-API-Key`. Las solicitudes internas sin `Origin` siguen permitidas. Los orígenes desconocidos reciben HTTP 403.
 
-Toda futura operación de edición de terminales deberá incorporarse detrás de sesión, autorización por rol y `X-CSRF-Token`; esta etapa no crea ese endpoint.
+La edición `PATCH /api/v1/terminales/:terminal` está detrás de sesión, autorización por rol y `X-CSRF-Token`. Su correo V2 y estados de conciliación se describen en [power-automate-v2.md](power-automate-v2.md).
 
 No se deben almacenar contraseñas, API keys, tokens CSRF ni identificadores de sesión en `localStorage` o IndexedDB. El token CSRF puede mantenerse únicamente en memoria durante la sesión de la PWA.
 

@@ -317,6 +317,6 @@ PATCH /api/v1/terminales/:terminal
 POST  /api/v1/auth/password
 ```
 
-La edición exige `version`, `cambios` y CSRF; persiste e historiza todos los campos admitidos. Únicamente `Celular` dispone actualmente de propagación confirmada hacia Power Automate. Consulta [../../docs/frontend-architecture.md](../../docs/frontend-architecture.md) para el contrato y las limitaciones.
+La edición exige `version`, `cambios` y CSRF; persiste e historiza los campos admitidos. Los 23 campos configurados se agrupan en una operación y se transmiten en un único correo `ACTUALIZAR_CARTERA_V2`. La respuesta distingue el guardado local del estado externo; `ENVIADO` solo significa que Microsoft Graph aceptó el correo. Consulta [../../docs/power-automate-v2.md](../../docs/power-automate-v2.md) para el contrato, la cola, la conciliación y las limitaciones de concurrencia.
 
 `filtros/opciones` devuelve los valores distintos de filtros y los nombres de campos dinámicos visibles para el rol actual. No revela metadatos de terminales inactivas a `USUARIO`.

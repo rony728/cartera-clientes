@@ -131,7 +131,8 @@ async function updateTerminal(pool, { terminal, version, changes, userId }) {
            valor_nuevo, valor_nuevo_presente, estado, usuario_id)
           VALUES ($1, $2, $3,
             COALESCE((SELECT max(revision) + 1 FROM public.cola_sincronizacion WHERE terminal = $2 AND campo = $3), 1),
-            $4::jsonb, $5, $6::jsonb, true, 'PENDIENTE', $7) RETURNING id, campo, estado`,
+            $4::jsonb, $5, $6::jsonb, true, 'PENDIENTE', $7)
+          RETURNING id, operacion_id, campo, valor_nuevo, estado`,
         values: [operationId, terminal, field, JSON.stringify(oldValue), oldPresent, JSON.stringify(value), userId]
       });
       const queueRow = queued.rows[0];
@@ -161,13 +162,23 @@ async function updateTerminal(pool, { terminal, version, changes, userId }) {
   }
 }
 
-async function markQueue(pool, id, state, error = null) {
-  await pool.query({
+async function markQueueOperation(pool, operationId, state, error = null) {
+  const result = await pool.query({
     text: `UPDATE public.cola_sincronizacion SET estado = $2,
-      fecha_envio = CASE WHEN $2 = 'ENVIADO' THEN now() ELSE fecha_envio END,
-      intentos = intentos + 1, ultimo_error = $3 WHERE id = $1`,
-    values: [id, state, error]
+      fecha_envio = CASE WHEN $2 = 'INCIERTO' THEN now() ELSE fecha_envio END,
+      intentos = intentos + CASE WHEN $2 = 'INCIERTO' THEN 1 ELSE 0 END,
+      ultimo_error = $3 WHERE operacion_id = $1
+        AND estado = ANY($4::text[])`,
+    values: [operationId, state, error, ['PENDIENTE', 'INCIERTO']]
   });
+  return result.rowCount;
 }
 
-module.exports = { getDashboard, getFieldNames, getFilterOptions, getHistory, markQueue, updateTerminal };
+module.exports = {
+  getDashboard,
+  getFieldNames,
+  getFilterOptions,
+  getHistory,
+  markQueueOperation,
+  updateTerminal
+};

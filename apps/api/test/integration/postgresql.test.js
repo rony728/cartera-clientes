@@ -374,16 +374,25 @@ test('consultas auxiliares y edición de terminales funcionan con PostgreSQL rea
 
   const updated = await terminalRepository.updateTerminal(pool, {
     terminal: 'EDIT-001', version: 1,
-    changes: { Celular: '2222', CampoDinamico: 'valor' }, userId: user.rows[0].id
+    changes: { Celular: '2222', Zona: 'Centro' }, userId: user.rows[0].id
   });
   assert.equal(updated.kind, 'updated');
   assert.equal(updated.terminal.version, '2');
   assert.equal(updated.queue.length, 2);
+  assert.equal(updated.queue[0].operacion_id, updated.queue[1].operacion_id);
+  await terminalRepository.markQueueOperation(pool, updated.queue[0].operacion_id, 'INCIERTO');
+  await terminalRepository.markQueueOperation(pool, updated.queue[0].operacion_id, 'ENVIADO');
+  const operationStates = await pool.query({
+    text: 'SELECT estado, intentos, fecha_envio IS NOT NULL AS tiene_fecha FROM public.cola_sincronizacion WHERE operacion_id = $1',
+    values: [updated.queue[0].operacion_id]
+  });
+  assert.equal(operationStates.rows.length, 2);
+  assert.ok(operationStates.rows.every((row) => row.estado === 'ENVIADO' && row.intentos === 1 && row.tiene_fecha));
   assert.equal((await pool.query("SELECT count(*)::int AS total FROM public.historial_cambios WHERE terminal = 'EDIT-001' AND origen = 'PWA'")).rows[0].total, 2);
 
   const identical = await terminalRepository.updateTerminal(pool, {
     terminal: 'EDIT-001', version: 2,
-    changes: { Celular: '2222', CampoDinamico: 'valor' }, userId: user.rows[0].id
+    changes: { Celular: '2222', Zona: 'Centro' }, userId: user.rows[0].id
   });
   assert.equal(identical.kind, 'unchanged');
   assert.equal((await pool.query("SELECT count(*)::int AS total FROM public.historial_cambios WHERE terminal = 'EDIT-001' AND origen = 'PWA'")).rows[0].total, 2);

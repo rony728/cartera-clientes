@@ -10,9 +10,24 @@ const FILTER_FIELDS = Object.freeze([
 const SORT_FIELDS = Object.freeze([
   'NombreComercial', 'Terminal', 'CodigoComercio', 'Ciudad', 'TecnicoAsignado'
 ]);
+const POWER_AUTOMATE_FIELDS = Object.freeze([
+  'CodigoComercio', 'NombreComercial', 'Zona', 'Direccion', 'Ciudad',
+  'Inventario', 'SeriePOS', 'Modelo', 'Comunicacion', 'RedSimcard',
+  'SerieSimcard', 'Atendio', 'Celular', 'Ubicacion', 'TecnicoAsignado',
+  'IP', 'Mascara', 'Gateway', 'DNS', 'DNS2', 'PLATAFORMA', 'Correo',
+  'CategoriaComercio'
+]);
+const POWER_AUTOMATE_FIELD_SET = new Set(POWER_AUTOMATE_FIELDS);
 const INTERNAL_FIELDS = new Set([
   'Terminal', 'ItemInternalId', '@odata.etag', 'version', 'activa',
   'fecha_creacion', 'fecha_actualizacion', 'fecha_ultima_sincronizacion'
 ]);
 
-module.exports = { FILTER_FIELDS, INTERNAL_FIELDS, SEARCH_FIELDS, SORT_FIELDS };
+module.exports = {
+  FILTER_FIELDS,
+  INTERNAL_FIELDS,
+  POWER_AUTOMATE_FIELDS,
+  POWER_AUTOMATE_FIELD_SET,
+  SEARCH_FIELDS,
+  SORT_FIELDS
+};

@@ -1,7 +1,8 @@
 const express = require('express');
+const { buildPowerAutomateV2Mail } = require('../mail');
 const { findTerminal, searchTerminales } = require('./queries');
 const repository = require('./repository');
-const { INTERNAL_FIELDS } = require('./fields');
+const { INTERNAL_FIELDS, POWER_AUTOMATE_FIELD_SET } = require('./fields');
 const { ValidationError, parseSearchParams, validateTerminalParam } = require('./validation');
 
 function handleError(res, error) {
@@ -30,19 +31,21 @@ function validateChanges(body) {
     throw new ValidationError('Los cambios no son válidos.');
   }
   const entries = Object.entries(body.cambios);
-  if (entries.length < 1 || entries.length > 100) throw new ValidationError('La cantidad de cambios no es válida.');
+  if (entries.length < 1 || entries.length > POWER_AUTOMATE_FIELD_SET.size) {
+    throw new ValidationError('La cantidad de cambios no es válida.');
+  }
   for (const [field, value] of entries) {
     if (!field || field.length > 120 || INTERNAL_FIELDS.has(field) || /[\u0000-\u001F\u007F]/u.test(field)) {
       throw new ValidationError(`El campo ${field || '(vacío)'} no se puede editar.`);
     }
-    if (value !== null && !['string', 'number', 'boolean'].includes(typeof value)) {
+    if (!POWER_AUTOMATE_FIELD_SET.has(field)) {
+      throw new ValidationError(`El campo ${field} todavía no admite propagación a Excel.`);
+    }
+    if (value !== null && typeof value !== 'string') {
       throw new ValidationError(`El valor de ${field} no es válido.`);
     }
     if (typeof value === 'string' && value.length > 5000) {
       throw new ValidationError(`El valor de ${field} es demasiado largo.`);
-    }
-    if (field === 'Celular' && typeof value === 'string' && /[|\u0000-\u001F\u007F]/u.test(value)) {
-      throw new ValidationError('El valor de Celular contiene caracteres no permitidos.');
     }
   }
   return { version: body.version, changes: Object.fromEntries(entries) };
@@ -135,28 +138,63 @@ function createTerminalesRouter({ pool, csrfProtection, sendMailFn, repositoryAp
       if (result.kind === 'conflict') return res.status(409).json({
         ok: false, codigo: 'VERSION_CONFLICT', mensaje: 'La terminal fue modificada por otra persona.', terminal: result.current
       });
-      if (result.kind === 'unchanged') return res.status(200).json({ ok: true, terminal: result.terminal, propagacion: [] });
+      if (result.kind === 'unchanged') return res.status(200).json({
+        ok: true,
+        terminal: result.terminal,
+        propagacion: [],
+        envio_excel: { estado: 'SIN_CAMBIOS', campos: [] }
+      });
 
-      const propagation = [];
-      for (const queueEntry of result.queue) {
-        if (queueEntry.campo !== 'Celular') {
-          propagation.push({ campo: queueEntry.campo, estado: 'PENDIENTE_INTEGRACION' });
-          continue;
-        }
-        try {
-          await sendMailFn({ subject: `ACTUALIZAR_CARTERA|${terminal}|${changes.Celular ?? ''}` });
-          await repositoryApi.markQueue(pool, queueEntry.id, 'ENVIADO');
-          propagation.push({ campo: 'Celular', estado: 'ENVIADO' });
-        } catch (_) {
-          await repositoryApi.markQueue(pool, queueEntry.id, 'ERROR', 'MAIL_DELIVERY_FAILED');
-          propagation.push({ campo: 'Celular', estado: 'ERROR' });
-        }
+      const operationId = result.queue[0].operacion_id;
+      const effectiveChanges = Object.fromEntries(
+        result.queue.map((entry) => [entry.campo, entry.valor_nuevo])
+      );
+      try {
+        const prepared = await repositoryApi.markQueueOperation(pool, operationId, 'INCIERTO');
+        if (prepared !== result.queue.length) throw new Error('QUEUE_PREPARATION_FAILED');
+      } catch (_) {
+        console.error('No se pudo preparar el registro de envío a Microsoft Graph.');
+        return res.status(200).json(buildUpdateResponse(result, 'PENDIENTE'));
       }
-      return res.status(200).json({ ok: true, terminal: result.terminal, propagacion: propagation });
+
+      try {
+        await sendMailFn(buildPowerAutomateV2Mail(terminal, effectiveChanges));
+      } catch (_) {
+        let failureState = 'ERROR';
+        try {
+          const marked = await repositoryApi.markQueueOperation(
+            pool, operationId, 'ERROR', 'MAIL_DELIVERY_FAILED'
+          );
+          if (marked !== result.queue.length) failureState = 'INCIERTO';
+        } catch (_) {
+          failureState = 'INCIERTO';
+        }
+        return res.status(200).json(buildUpdateResponse(result, failureState));
+      }
+
+      let externalState = 'ENVIADO';
+      try {
+        const marked = await repositoryApi.markQueueOperation(pool, operationId, 'ENVIADO');
+        if (marked !== result.queue.length) throw new Error('QUEUE_FINALIZATION_FAILED');
+      } catch (_) {
+        externalState = 'INCIERTO';
+        console.error('Microsoft Graph aceptó el correo, pero no se pudo registrar el estado de la operación.');
+      }
+      return res.status(200).json(buildUpdateResponse(result, externalState));
     } catch (error) { return handleError(res, error); }
   });
 
   return router;
 }
 
-module.exports = { createTerminalesRouter };
+function buildUpdateResponse(result, state) {
+  const fields = result.queue.map((entry) => entry.campo);
+  return {
+    ok: true,
+    terminal: result.terminal,
+    propagacion: fields.map((campo) => ({ campo, estado: state })),
+    envio_excel: { estado: state, campos: fields }
+  };
+}
+
+module.exports = { createTerminalesRouter, validateChanges };

@@ -2,8 +2,10 @@ import { useEffect,useMemo,useState,type FormEvent } from 'react';
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query';
 import { Link,useLocation,useNavigate,useParams } from 'react-router-dom';
 import { api,ApiError } from '../api';
-import { INTERNAL_FIELDS,metaFor } from '../fields';
+import { EDITABLE_FIELDS,INTERNAL_FIELDS,metaFor } from '../fields';
 import type { Terminal } from '../types';
+
+interface UpdateResponse { terminal:Terminal;propagacion:{campo:string;estado:string}[];envio_excel:{estado:string;campos:string[]} }
 
 export default function Edit(){
  const{terminal=''}=useParams(),nav=useNavigate(),location=useLocation(),client=useQueryClient();
@@ -16,8 +18,8 @@ export default function Edit(){
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty)e.preventDefault();};addEventListener('beforeunload',warn);return()=>removeEventListener('beforeunload',warn);},[dirty]);
  const detail=`/comercios/${encodeURIComponent(terminal)}`;
  const mutation=useMutation({
-  mutationFn:()=>api<{terminal:Terminal;propagacion:{campo:string;estado:string}[]}>(`/api/v1/terminales/${encodeURIComponent(terminal)}`,{method:'PATCH',body:JSON.stringify({version:query.data!.version,cambios:changes})}),
-  onSuccess:async data=>{client.setQueryData(['terminal',terminal,false],data.terminal);await client.invalidateQueries({queryKey:['terminales']});const failed=data.propagacion.some(item=>item.estado==='ERROR'),pending=data.propagacion.some(item=>item.estado==='PENDIENTE_INTEGRACION');const message=failed?'Guardado en PostgreSQL; falló el envío de una actualización a Excel.':pending?'Guardado en PostgreSQL; algunos campos aún no tienen integración con Excel.':'Guardado en PostgreSQL y enviado para conciliación con Excel.';nav(detail,{replace:true,state:{message,search}});},
+  mutationFn:()=>api<UpdateResponse>(`/api/v1/terminales/${encodeURIComponent(terminal)}`,{method:'PATCH',body:JSON.stringify({version:query.data!.version,cambios:changes})}),
+  onSuccess:async data=>{client.setQueryData(['terminal',terminal,false],data.terminal);await client.invalidateQueries({queryKey:['terminales']});const state=data.envio_excel.estado;const message=state==='ERROR'?'Guardado en PostgreSQL; falló el envío de la actualización a Excel.':state==='INCIERTO'?'Guardado en PostgreSQL; Microsoft Graph aceptó el envío, pero su registro quedó incierto.':state==='PENDIENTE'?'Guardado en PostgreSQL; el envío a Excel no pudo iniciarse y permanece pendiente.':'Guardado en PostgreSQL y enviado para conciliación con Excel.';nav(detail,{replace:true,state:{message,search}});},
   onError:e=>{if(e instanceof ApiError&&e.status===409&&(e.data as {codigo?:string})?.codigo==='VERSION_CONFLICT')setConflict((e.data as {terminal:Terminal}).terminal);}
  });
  function submit(e:FormEvent){e.preventDefault();if(dirty&&!mutation.isPending)mutation.mutate();}
@@ -28,7 +30,7 @@ export default function Edit(){
   {dirty&&<div className="alert">Hay {Object.keys(changes).length} cambios pendientes.</div>}
   {mutation.error&&!conflict&&<div className="alert error">{mutation.error.message}</div>}
   {conflict&&<div className="alert error"><strong>Conflicto de versión.</strong><p>Otra persona modificó esta terminal. Tus cambios permanecen en pantalla; compara antes de recargar.</p><div className="conflict-grid">{Object.entries(changes).map(([field,local])=><div key={field}><b>{metaFor(field).label}</b><span>Tu valor: {String(local??'')}</span><span>Actual: {String(conflict.datos_excel[field]??'')}</span></div>)}</div><button type="button" onClick={()=>{setConflict(null);void query.refetch();}}>Descartar edición local y recargar</button></div>}
-  <div className="form-grid">{fields.map(field=><label key={field}>{metaFor(field).label}<input value={String(values[field]??'')} onChange={e=>setValues(v=>({...v,[field]:e.target.value}))}/></label>)}</div>
+  <div className="form-grid">{fields.map(field=>{const editable=EDITABLE_FIELDS.has(field);return <label key={field}>{metaFor(field).label}<input value={String(values[field]??'')} disabled={!editable} aria-describedby={editable?undefined:`unsupported-${field}`} onChange={e=>setValues(v=>({...v,[field]:e.target.value}))}/>{!editable&&<small id={`unsupported-${field}`}>Solo lectura: pendiente de integración con Excel.</small>}</label>;})}</div>
   <div className="sticky-actions"><Link className="button" to={detail} state={{search}}>Cancelar</Link><button className="primary" disabled={!dirty||mutation.isPending}>Guardar cambios</button></div>
  </form>;
 }

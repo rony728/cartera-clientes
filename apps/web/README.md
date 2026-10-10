@@ -35,6 +35,8 @@ El frontend se publica automáticamente en GitHub Pages desde `main`. La configu
 5. Verificar que logout borra la copia local y que `USUARIO` no ve inactivas ni administración.
 6. Probar permisos denegados, selección de cámara y lectura QR/código en HTTPS.
 
+La edición admite las 23 columnas configuradas en Power Automate, envía solo diferencias y conserva un único botón de guardado. Las propiedades dinámicas sin integración permanecen visibles en modo de solo lectura. El mensaje posterior separa el guardado PostgreSQL del estado del envío hacia Excel; un correo aceptado todavía requiere conciliación mediante un snapshot posterior. Consulta [../../docs/power-automate-v2.md](../../docs/power-automate-v2.md).
+
 ## Consulta sin conexión
 
 La búsqueda offline procesa la copia completa asociada al usuario en IndexedDB. Busca por coincidencia parcial en Terminal y en los valores comerciales —incluidos campos dinámicos— sin distinguir mayúsculas, minúsculas ni tildes. Los nombres internos de las propiedades no cuentan como coincidencias.

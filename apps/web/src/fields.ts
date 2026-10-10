@@ -12,6 +12,7 @@ const known: FieldMeta[] = [
   ['TecnicoAsignado','Técnico asignado','Contacto y gestión',true]
 ].map(([key,label,group,priority]) => ({key:String(key),label:String(label),group:String(group),priority:Boolean(priority)}));
 export const FIELD_META = new Map(known.map((field) => [field.key, field]));
+export const EDITABLE_FIELDS = new Set(known.map((field) => field.key));
 export const INTERNAL_FIELDS = new Set(['ItemInternalId','@odata.etag','version','activa','fecha_creacion','fecha_actualizacion','fecha_ultima_sincronizacion']);
 export const metaFor = (key: string): FieldMeta => FIELD_META.get(key) || { key, label: key.replace(/([a-z])([A-Z])/gu,'$1 $2'), group: 'Información adicional' };
 export const PRIORITY_FIELDS = known.filter((f) => f.priority).map((f) => f.key);

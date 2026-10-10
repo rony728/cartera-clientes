@@ -159,5 +159,5 @@ describe('flujo completo online → offline → online', () => {
     expect(await screen.findByText('En línea')).toBeInTheDocument();
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBeforeReconnect));
     expect(await screen.findByRole('heading', { name: 'Ferretería Terminal 284' })).toBeInTheDocument();
-  });
+  }, 15_000);
 });

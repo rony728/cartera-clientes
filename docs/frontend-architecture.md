@@ -22,9 +22,9 @@ El service worker precachea el shell y dependencias locales. Las llamadas `/api/
 
 ## Edición, historial y Excel
 
-`PATCH /api/v1/terminales/:terminal` exige sesión, CSRF y versión. Actualiza PostgreSQL, historial y cola en una transacción. Un conflicto HTTP 409 devuelve la versión vigente sin sobrescribir el formulario local. Terminal e internos no son editables; los campos JSONB desconocidos se muestran y editan automáticamente.
+`PATCH /api/v1/terminales/:terminal` exige sesión, CSRF y versión. Actualiza PostgreSQL, historial y cola en una transacción. Un conflicto HTTP 409 devuelve la versión vigente sin sobrescribir el formulario local. Terminal e internos no son editables. Los 23 campos configurados en Power Automate se pueden editar; campos JSONB desconocidos continúan visibles, pero son de solo lectura.
 
-Solo `Celular` tiene contrato confirmado con Power Automate (`ACTUALIZAR_CARTERA|Terminal|Celular`). Otros campos quedan guardados en PostgreSQL e historial como `PENDIENTE_INTEGRACION`; no se presentan como actualizados en Excel. Correo aceptado significa `ENVIADO`, no confirmado: la confirmación depende de un snapshot posterior.
+Cada guardado transmite únicamente diferencias efectivas en un correo `ACTUALIZAR_CARTERA_V2`, aunque cambien varios campos. La PWA distingue guardado PostgreSQL de `ENVIADO`, `ERROR` o `INCIERTO`. Correo aceptado significa `ENVIADO`, no confirmado: la confirmación depende de un snapshot posterior. El endpoint V1 de `Celular` se conserva, pero no interviene en el flujo de edición. Consulta [power-automate-v2.md](power-automate-v2.md).
 
 ## Exportación, escáner y fotografías
 
@@ -51,6 +51,6 @@ El endpoint de filtros devuelve `datos` con valores distintos autorizados y `cam
 ## Limitaciones verificables
 
 - Fotografías y linterna no tienen integración productiva.
-- Campos distintos de `Celular` no tienen transporte Power Automate.
+- No se ha ejecutado desde este repositorio una prueba funcional extremo a extremo con el flujo y Excel reales; la aceptación de Graph no la sustituye.
 - Las pruebas PostgreSQL reales y pruebas físicas de cámara no se ejecutaron en Windows; deben repetirse en la base aislada y dispositivos objetivo. La transición completa online → offline → online, búsqueda, paginación y apertura de fichas sí se cubren con los componentes React, `AuthProvider`, cliente API, TanStack Query e IndexedDB simulado, incluida una copia sintética de 1,000 registros.
 - Se prepara el build, pero no se despliega ni cambia Cloudflare, PM2 o Ubuntu.
