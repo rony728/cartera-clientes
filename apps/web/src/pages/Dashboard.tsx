@@ -13,6 +13,7 @@ import {
 import { ApiError, api, importSnapshot } from '../api';
 import { useAuth } from '../Auth';
 import { metaFor } from '../fields';
+import { groupDistribution } from '../normalization';
 
 interface DashboardData {
   indicadores: Record<string, number | null>;
@@ -110,24 +111,27 @@ export default function Dashboard() {
       ))}
     </div>
     <div className="charts">
-      {Object.entries(data?.distribuciones || {}).map(([field, chartData]) => (
-        <article className="chart-card" key={field}>
-          <h2>{metaFor(field).label}</h2>
-          <ResponsiveContainer width="100%" height={260}>
+      {Object.entries(data?.distribuciones || {}).map(([field, rawData]) => {
+        const chartData=groupDistribution(rawData);
+        const openFilter=(value:string)=>nav(`/comercios?${field}=${encodeURIComponent(value)}`);
+        return <article className="chart-card" key={field}>
+          <h2 id={`chart-${field}`}>{metaFor(field).label}</h2>
+          <div className="visual-chart" aria-hidden="true"><ResponsiveContainer width="100%" height={260}>
             <BarChart data={chartData} layout="vertical" margin={{ left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis type="number" />
-              <YAxis type="category" dataKey="valor" width={95} tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="label" width={95} tick={{ fontSize: 11 }} />
               <Tooltip />
               <Bar dataKey="total" fill="#a71930" radius={[0, 4, 4, 0]} onClick={(item) => {
-                const selected = item as unknown as { valor?: string; payload?: { valor?: string } };
-                const value = selected.valor ?? selected.payload?.valor;
-                if (value) nav(`/comercios?${field}=${encodeURIComponent(value)}`);
+                const selected = item as unknown as { value?: string; payload?: { value?: string } };
+                const value = selected.value ?? selected.payload?.value;
+                if (value) openFilter(value);
               }} />
             </BarChart>
-          </ResponsiveContainer>
-        </article>
-      ))}
+          </ResponsiveContainer></div>
+          <div className="chart-table-wrap"><table className="chart-table" aria-labelledby={`chart-${field}`}><thead><tr><th>Categoría</th><th>Cantidad</th></tr></thead><tbody>{chartData.map(item=><tr key={item.value}><td><button type="button" onClick={()=>openFilter(item.value)} aria-label={`Filtrar ${metaFor(field).label} por ${item.label}`}>{item.label}</button></td><td>{item.total}</td></tr>)}</tbody></table></div>
+        </article>;
+      })}
     </div>
     {user?.rol === 'ADMIN' && <section className="admin-sync">
       <h2>Sincronización con Excel</h2>

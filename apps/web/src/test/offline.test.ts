@@ -33,6 +33,7 @@ const rows: Terminal[] = [
       Inventario: 'INV-001',
       Zona: 'Nórte',
       Ciudad: 'Tegucigalpa',
+      Comunicacion: ' Gprs ',
       CampoDinamico: 'Referencia especial'
     }
   },
@@ -46,7 +47,8 @@ const rows: Terminal[] = [
       SeriePOS: 'SERIE-XYZ-10',
       Inventario: 'INV-002',
       Zona: 'Sur',
-      Ciudad: 'San Pedro Sula'
+      Ciudad: 'San Pedro Sula',
+      Comunicacion: 'GPRS'
     }
   },
   {
@@ -151,8 +153,19 @@ describe('consulta offline', () => {
 
     const options = await offlineFilterOptions('u1');
 
-    expect(options.datos.Zona).toEqual(['Nórte', 'Norte', 'Sur']);
+    expect(options.datos.Zona).toEqual(['Norte', 'Sur']);
+    expect(options.datos.Comunicacion).toEqual(['GPRS']);
     expect(options.campos).toContain('CampoDinamico');
+  });
+
+  it('agrupa variantes equivalentes sin modificar los valores almacenados', async () => {
+    await replaceOfflineTerminals('u1', rows);
+
+    const result = await searchOffline('u1', { ...baseState, filtros: { Comunicacion: 'GPRS' } });
+    const stored = await offlineTerminal('u1', '00001234');
+
+    expect(result.datos.map((row) => row.terminal)).toEqual(['00005678', '00001234']);
+    expect(stored?.datos_excel.Comunicacion).toBe(' Gprs ');
   });
 
   it('devuelve cero para términos realmente ausentes aunque existan registros locales', async () => {

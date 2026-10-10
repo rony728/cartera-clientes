@@ -11,14 +11,17 @@ const mocks=vi.hoisted(()=>({
  api:vi.fn(),
  searchOffline:vi.fn(),
  writeText:vi.fn(),
+ getColumns:vi.fn(),
+ saveColumns:vi.fn(),
+ user:{id:'1',nombre:'Prueba',usuario:'prueba',rol:'ADMIN',autenticado:true},
  offline:false
 }));
 
-vi.mock('../Auth',()=>({useAuth:()=>({user:{id:'1',nombre:'Prueba',usuario:'prueba',rol:'ADMIN',autenticado:true},offline:mocks.offline})}));
+vi.mock('../Auth',()=>({useAuth:()=>({user:mocks.user,offline:mocks.offline})}));
 vi.mock('../api',()=>({api:mocks.api,searchTerminals:mocks.searchTerminals}));
 vi.mock('../offline',async(importOriginal)=>{
  const actual=await importOriginal<typeof import('../offline')>();
- return {...actual,downloadOffline:vi.fn(),getColumns:vi.fn().mockResolvedValue([]),offlineFilterOptions:vi.fn().mockResolvedValue({datos:{},campos:[]}),offlineMeta:vi.fn().mockResolvedValue(null),saveColumns:vi.fn(),searchOffline:mocks.searchOffline};
+ return {...actual,downloadOffline:vi.fn(),getColumns:mocks.getColumns,offlineFilterOptions:vi.fn().mockResolvedValue({datos:{},campos:[]}),offlineMeta:vi.fn().mockResolvedValue(null),saveColumns:mocks.saveColumns,searchOffline:mocks.searchOffline};
 });
 vi.mock('../export',()=>({exportTerminals:vi.fn()}));
 
@@ -33,9 +36,11 @@ function renderCommerce(entry='/comercios'){
 describe('interfaz de Comercios',()=>{
  beforeEach(()=>{
   mocks.searchTerminals.mockReset().mockImplementation((state:SearchState)=>Promise.resolve({...page,paginacion:{...page.paginacion,pagina:state.pagina}}));
-  mocks.api.mockReset().mockResolvedValue({datos:{Ciudad:['Danlí']},campos:['NombreComercial','SeriePOS','Inventario','Ciudad']});
+  mocks.api.mockReset().mockResolvedValue({datos:{Ciudad:['Danlí'],Comunicacion:['GPRS',' Gprs ']},campos:['NombreComercial','SeriePOS','Inventario','Ciudad','Comunicacion','CampoDinamico']});
   mocks.searchOffline.mockReset().mockResolvedValue(page);
   mocks.writeText.mockReset().mockResolvedValue(undefined);
+  mocks.getColumns.mockReset().mockResolvedValue(['Inventario','SeriePOS']);
+  mocks.saveColumns.mockReset().mockResolvedValue(undefined);
   mocks.offline=false;
   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:mocks.writeText}});
  });
@@ -71,6 +76,7 @@ describe('interfaz de Comercios',()=>{
   expect(filters).toHaveTextContent('(1)');
   await user.click(screen.getByRole('button',{name:/Herramientas/u}));
   await user.click(screen.getByRole('menuitem',{name:'Columnas'}));
+  expect(mocks.getColumns).toHaveBeenCalledWith('1',expect.any(Array));
   expect(screen.getByText('Columnas visibles')).toBeInTheDocument();
  });
 
@@ -105,5 +111,63 @@ describe('interfaz de Comercios',()=>{
   await screen.findByRole('link',{name:'Café Central'});
   expect(mocks.searchOffline).toHaveBeenCalledWith('1',expect.objectContaining({campo:'terminal',q:'00001234'}));
   expect(mocks.searchTerminals).not.toHaveBeenCalled();
+ });
+
+ it('mantiene preferencias y reordena columnas con controles descriptivos',async()=>{
+  const user=userEvent.setup();
+  renderCommerce();
+  await screen.findByRole('link',{name:'Café Central'});
+  await user.click(screen.getByRole('button',{name:/Herramientas/u}));
+  await user.click(screen.getByRole('menuitem',{name:'Columnas'}));
+  const moveUp=screen.getByRole('button',{name:'Mover Inventario hacia arriba'});
+  const moveDown=screen.getByRole('button',{name:'Mover Inventario hacia abajo'});
+  expect(moveUp).toBeDisabled();
+  expect(moveDown).toBeEnabled();
+  await user.click(moveDown);
+  expect(mocks.saveColumns).toHaveBeenLastCalledWith('1',['SeriePOS','Inventario']);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Mover Inventario hacia arriba'})).toBeEnabled());
+  await user.click(screen.getByRole('checkbox',{name:/Campo Dinamico/u}));
+  expect(mocks.saveColumns).toHaveBeenLastCalledWith('1',['SeriePOS','Inventario','CampoDinamico']);
+ });
+
+ it('expone aria-sort y anuncia la dirección activa',async()=>{
+  const user=userEvent.setup();
+  renderCommerce();
+  await screen.findByRole('link',{name:'Café Central'});
+  const nameSort=screen.getByRole('button',{name:'Ordenar por Nombre comercial, actualmente ascendente'});
+  expect(nameSort.closest('th')).toHaveAttribute('aria-sort','ascending');
+  expect(screen.getByRole('button',{name:'Ordenar por Terminal'}).closest('th')).toHaveAttribute('aria-sort','none');
+  await user.click(nameSort);
+  expect(await screen.findByRole('button',{name:'Ordenar por Nombre comercial, actualmente descendente'})).toBeInTheDocument();
+ });
+
+ it('consulta todas las variantes equivalentes online sin alterar los valores',async()=>{
+  renderCommerce('/comercios?Comunicacion=GPRS');
+  await screen.findByRole('link',{name:'Café Central'});
+  await waitFor(()=>{
+   expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:'GPRS'})}),expect.any(AbortSignal));
+   expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:' Gprs '})}),expect.any(AbortSignal));
+  });
+ });
+
+ it('ofrece limpiar búsqueda y quitar filtros en un estado vacío',async()=>{
+  mocks.searchTerminals.mockResolvedValue({datos:[],paginacion:{pagina:1,limite:20,total:0,total_paginas:0}});
+  const user=userEvent.setup();
+  renderCommerce('/comercios?q=inexistente&Ciudad=Danl%C3%AD');
+  const clear=await screen.findByRole('button',{name:'Limpiar búsqueda'});
+  expect(screen.getByRole('button',{name:'Quitar filtros'})).toBeInTheDocument();
+  await user.click(clear);
+  await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({q:'',filtros:expect.objectContaining({Ciudad:'Danlí'})}),expect.any(AbortSignal)));
+ });
+
+ it('anuncia el fallo de copia sin navegar',async()=>{
+  const user=userEvent.setup();
+  const writeText=vi.spyOn(navigator.clipboard,'writeText').mockRejectedValueOnce(new Error('denegado'));
+  renderCommerce();
+  await screen.findByRole('link',{name:'Café Central'});
+  await user.click(screen.getByRole('button',{name:'Copiar Terminal'}));
+  expect(writeText).toHaveBeenCalledWith('00001234');
+  expect(screen.getByRole('status')).toHaveTextContent('Terminal: No se pudo copiar');
+  expect(screen.getByRole('heading',{name:'Café Central'})).toBeInTheDocument();
  });
 });
