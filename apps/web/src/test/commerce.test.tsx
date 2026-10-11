@@ -14,6 +14,7 @@ const mocks=vi.hoisted(()=>({
  writeText:vi.fn(),
  getColumns:vi.fn(),
  saveColumns:vi.fn(),
+ exportTerminals:vi.fn(),
  user:{id:'1',nombre:'Prueba',usuario:'prueba',rol:'ADMIN',autenticado:true},
  offline:false
 }));
@@ -24,7 +25,7 @@ vi.mock('../offline',async(importOriginal)=>{
  const actual=await importOriginal<typeof import('../offline')>();
  return {...actual,downloadOffline:vi.fn(),getColumns:mocks.getColumns,offlineFilterOptions:vi.fn().mockResolvedValue({datos:{},campos:[]}),offlineMeta:vi.fn().mockResolvedValue(null),saveColumns:mocks.saveColumns,searchOffline:mocks.searchOffline};
 });
-vi.mock('../export',()=>({exportTerminals:vi.fn()}));
+vi.mock('../export',()=>({exportTerminals:mocks.exportTerminals}));
 
 const terminal:Terminal={terminal:'00001234',activa:true,version:'1',datos_excel:{NombreComercial:'Café Central',SeriePOS:'SER-0007',Inventario:'INV-0042',Ciudad:'Danlí',CodigoComercio:''}};
 const page={datos:[terminal],paginacion:{pagina:1,limite:20,total:1,total_paginas:2}};
@@ -52,6 +53,7 @@ describe('interfaz de Comercios',()=>{
   mocks.writeText.mockReset().mockResolvedValue(undefined);
   mocks.getColumns.mockReset().mockResolvedValue(['Inventario','SeriePOS']);
   mocks.saveColumns.mockReset().mockResolvedValue(undefined);
+  mocks.exportTerminals.mockReset().mockResolvedValue(undefined);
   mocks.offline=false;
   Object.defineProperty(window,'scrollY',{configurable:true,value:0});
   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:mocks.writeText}});
@@ -160,6 +162,18 @@ describe('interfaz de Comercios',()=>{
    expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:'GPRS'})}),expect.any(AbortSignal));
    expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:' Gprs '})}),expect.any(AbortSignal));
   });
+ });
+
+ it('exporta todas las variantes equivalentes del filtro online',async()=>{
+  const user=userEvent.setup();
+  renderCommerce('/comercios?Comunicacion=GPRS');
+  await screen.findByRole('link',{name:'Café Central'});
+  mocks.searchTerminals.mockClear();
+  await user.click(screen.getByRole('button',{name:/Herramientas/u}));
+  await user.click(screen.getByRole('menuitem',{name:'Exportar .xlsx'}));
+  await waitFor(()=>expect(mocks.exportTerminals).toHaveBeenCalledWith([terminal],['Inventario','SeriePOS'],false));
+  expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:'GPRS'}),pagina:1,limite:100}),undefined);
+  expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:' Gprs '}),pagina:1,limite:100}),undefined);
  });
 
  it('ofrece limpiar búsqueda y quitar filtros en un estado vacío',async()=>{

@@ -40,7 +40,7 @@ export default function Commerce(){
  const sortBy=useCallback((field:string)=>{const next=new URLSearchParams(params);next.set('orden',field);next.set('direccion',state.orden===field&&state.direccion==='asc'?'desc':'asc');next.set('pagina','1');setParams(next);},[params,setParams,state.direccion,state.orden]);
  const scanned=useCallback((value:string)=>{setScan(false);setTyped(value);update('campo','todos');},[update]);
  async function download(){if(!user||offline)return;setSync({done:0,total:0});try{const count=await downloadOffline(user,(done,total)=>setSync({done,total}));setNotice(`${count} registros disponibles sin conexión.`);}catch{setNotice('No se pudo actualizar la copia local; se conservó la anterior.');}finally{setSync(null);}}
- async function matchingRows(){if(offline)return(await searchOffline(user!.id,{...state,pagina:1,limite:Number.MAX_SAFE_INTEGER})).datos;const rows:Terminal[]=[];let page=1;while(true){const result=await searchTerminals({...state,pagina:page,limite:100});rows.push(...result.datos);if(rows.length>=result.paginacion.total)break;page++;}return rows;}
+ async function matchingRows(){if(offline)return(await searchOffline(user!.id,{...state,pagina:1,limite:Number.MAX_SAFE_INTEGER})).datos;return allOnlineRows(state,filterVariants);}
  async function exportAll(){try{setNotice('Preparando exportación…');const rows=await matchingRows();await exportTerminals(rows,columns,offline);setNotice(`${rows.length} registros exportados con los filtros actuales.`);}catch{setNotice('No se pudo generar la exportación.');}}
  function changeColumns(next:string[]){setColumns(next);if(user)void saveColumns(user.id,next);}
  function moveColumn(field:string,direction:-1|1){const index=columns.indexOf(field),target=index+direction;if(index<0||target<0||target>=columns.length)return;const next=[...columns];[next[index],next[target]]=[next[target],next[index]];changeColumns(next);}
@@ -90,10 +90,28 @@ function TerminalCard({terminal,searchState,onOpen}:{terminal:Terminal;searchSta
 }
 
 async function searchOnlineWithVariants(state:SearchState,variants:Record<string,string[]>,signal?:AbortSignal):Promise<Page<Terminal>>{
- const selected=Object.entries(state.filtros).filter(([,value])=>value);
- const requiresExpansion=selected.some(([field,value])=>{const values=variants[field]||[value];return values.length!==1||values[0]!==value;});
- if(!requiresExpansion)return searchTerminals(state,signal);
- const combinations=selected.reduce<Record<string,string>[]>((items,[field,value])=>items.flatMap(item=>(variants[field]||[value]).map(variant=>({...item,[field]:variant}))),[{}]);
+ if(!requiresVariantExpansion(state,variants))return searchTerminals(state,signal);
+ const rows=sortOnlineRows(await collectVariantRows(state,variants,signal),state),total=rows.length,start=(state.pagina-1)*state.limite;
+ return{datos:rows.slice(start,start+state.limite),paginacion:{pagina:state.pagina,limite:state.limite,total,total_paginas:Math.ceil(total/state.limite)}};
+}
+
+async function allOnlineRows(state:SearchState,variants:Record<string,string[]>,signal?:AbortSignal){
+ if(requiresVariantExpansion(state,variants))return sortOnlineRows(await collectVariantRows(state,variants,signal),state);
+ const rows:Terminal[]=[];
+ for(let page=1;;page++){
+  const result=await searchTerminals({...state,pagina:page,limite:100},signal);
+  rows.push(...result.datos);
+  if(rows.length>=result.paginacion.total)break;
+ }
+ return rows;
+}
+
+function requiresVariantExpansion(state:SearchState,variants:Record<string,string[]>){
+ return Object.entries(state.filtros).filter(([,value])=>value).some(([field,value])=>{const values=variants[field]||[value];return values.length!==1||values[0]!==value;});
+}
+
+async function collectVariantRows(state:SearchState,variants:Record<string,string[]>,signal?:AbortSignal){
+ const selected=Object.entries(state.filtros).filter(([,value])=>value),combinations=selected.reduce<Record<string,string>[]>((items,[field,value])=>items.flatMap(item=>(variants[field]||[value]).map(variant=>({...item,[field]:variant}))),[{}]);
  const unique=new Map<string,Terminal>();
  for(const filters of combinations){
   let page=1;
@@ -104,11 +122,14 @@ async function searchOnlineWithVariants(state:SearchState,variants:Record<string
    page++;
   }
  }
- const rows=Array.from(unique.values()),collator=new Intl.Collator('es',{sensitivity:'base',numeric:true}),direction=state.direccion==='asc'?1:-1;
+ return Array.from(unique.values());
+}
+
+function sortOnlineRows(rows:Terminal[],state:SearchState){
+ const collator=new Intl.Collator('es',{sensitivity:'base',numeric:true}),direction=state.direccion==='asc'?1:-1;
  const sortValue=(terminal:Terminal)=>String(state.orden==='Terminal'?terminal.terminal:excelValue(terminal.datos_excel,state.orden)??'');
  rows.sort((left,right)=>{const comparison=collator.compare(sortValue(left),sortValue(right));return comparison===0?collator.compare(left.terminal,right.terminal):comparison*direction;});
- const total=rows.length,start=(state.pagina-1)*state.limite;
- return{datos:rows.slice(start,start+state.limite),paginacion:{pagina:state.pagina,limite:state.limite,total,total_paginas:Math.ceil(total/state.limite)}};
+ return rows;
 }
 
 function Sortable({label,field,activeField,direction,sortBy}:{label:string;field:string;activeField:string;direction:'asc'|'desc';sortBy:(field:string)=>void}){const active=activeField===field,spoken=direction==='asc'?'ascendente':'descendente';return <th aria-sort={active?(direction==='asc'?'ascending':'descending'):'none'}><button className="table-sort" aria-label={active?`Ordenar por ${label}, actualmente ${spoken}`:`Ordenar por ${label}`} onClick={()=>sortBy(field)}>{label}{active&&<span aria-hidden="true"> {direction==='asc'?'↑':'↓'}</span>}</button></th>;}

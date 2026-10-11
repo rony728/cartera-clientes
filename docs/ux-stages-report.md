@@ -27,7 +27,7 @@ La correspondencia se reconstruye a partir del alcance explícito de las cuatro 
 | UX-010 | Variantes equivalentes de filtros | Resuelto con limitación | Agrupación online/offline sin reescritura; online puede ejecutar varias lecturas por grupo. |
 | UX-011 | Jerarquía de ficha | Resuelto | Identidad, datos principales, grupos, fotografía y luego historial. |
 | UX-012 | Ordenamiento accesible | Resuelto | `aria-sort`, dirección anunciada, foco y activación por teclado. |
-| UX-013 | Interpretación accesible del Dashboard | Resuelto | Gráficos interactivos acompañados por tablas de categoría/cantidad y navegación filtrada. |
+| UX-013 | Interpretación accesible del Dashboard | Resuelto con limitación | Gráficos interactivos acompañados por tablas de categoría/cantidad y navegación filtrada; el frontend solo puede reagrupar las categorías entregadas por el endpoint estadístico. |
 | UX-014 | Edición móvil y tipos de entrada | Parcialmente resuelto | Orden, `tel`/`email`, una acción de guardado y barra segura; falta teclado virtual real. |
 | UX-015 | Estado vacío de búsqueda | Resuelto | Diferencia carga/error/vacío y ofrece Limpiar búsqueda/Quitar filtros sin consulta extra. |
 | UX-016 | Desbordamiento de tabla escritorio | Resuelto | Anchos fijos para datos críticos, truncado consultable y scroll indicado cuando hay muchas columnas. |
@@ -54,6 +54,8 @@ Validación manual requerida antes de producción:
 4. Habilitar muchas columnas y comprobar pista, foco y desplazamiento horizontal; con columnas predeterminadas a 1366 px no debe existir desbordamiento apreciable.
 5. Probar cámara, linterna, PWA instalada y transición online → offline → online en equipos reales.
 6. Ejecutar Lighthouse desde un entorno servido por HTTPS y sesión de prueba. No se registró una puntuación desde jsdom porque no sería representativa.
+
+Riesgos conocidos: una selección con varias categorías equivalentes puede multiplicar las lecturas GET porque el contrato actual filtra por valor exacto; se deduplica por Terminal y no se realizan escrituras. El Dashboard suma correctamente las variantes presentes en la respuesta, pero el endpoint limita cada distribución y una variante fuera de ese límite no puede incorporarse sin cambiar el backend.
 
 ## Integración
 
