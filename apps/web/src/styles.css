@@ -21,3 +21,34 @@
 html,body,#root{width:100%;min-width:320px}.content,.commerce-page,.detail-page,.edit-form,.search-row>*{min-width:0}.commerce-table{table-layout:fixed}.commerce-table .commerce-name-column{width:220px}.commerce-table .commerce-terminal-column{width:160px}.commerce-table th,.commerce-table td{max-width:none;padding:.7rem .65rem}.commerce-table tbody tr:focus-visible{outline:3px solid rgba(167,25,48,.25);outline-offset:-3px}.table-scroll-hint{margin:0 0 .35rem;color:var(--muted);font-size:.76rem;text-align:right}.table-wrap.has-overflow-hint{box-shadow:inset -14px 0 14px -16px rgba(34,37,42,.7),var(--shadow)}.table-wrap:focus-visible{outline:3px solid rgba(167,25,48,.25);outline-offset:2px}.column-order button{min-height:42px;width:42px}.edit-form input{scroll-margin-block:5rem calc(150px + env(safe-area-inset-bottom))}
 @media(max-width:780px){body{scroll-padding-bottom:calc(80px + env(safe-area-inset-bottom))}.topbar{height:calc(52px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top)}.bottom-nav a{min-width:0}.filters-wrap .filters{max-height:calc(100dvh - 9rem)}.table-scroll-hint{display:none}.card-copy-actions button{min-height:42px}.card-detail-link{min-height:42px}.record-meta .icon-button{min-height:42px;width:42px}.record-heading .back-button,.edit-heading .button{min-height:42px}.sticky-actions{max-width:100%}.modal-card{max-height:calc(100dvh - 2rem);overflow:auto}}
 @media(max-width:390px){.card-copy-actions button{width:42px}.commerce-search .search-row{grid-template-columns:minmax(0,1fr) auto minmax(108px,auto)}.record-heading{align-items:start}}
+
+/* Ajustes finales de Comercios: columnas redimensionables y ficha compacta. */
+.commerce-table th{position:relative}
+.column-resizer{position:absolute;z-index:2;top:0;right:-6px;width:12px;height:100%;cursor:col-resize;touch-action:none}
+.column-resizer::after{content:"";position:absolute;top:20%;bottom:20%;left:5px;width:2px;border-radius:2px;background:#c7cbd2;transition:background-color .15s,box-shadow .15s}
+.column-resizer:hover::after,.column-resizer:focus-visible::after{background:var(--red);box-shadow:0 0 0 2px rgba(167,25,48,.12)}
+.column-resizer:focus-visible{outline:3px solid rgba(167,25,48,.25);outline-offset:-2px}
+.record-heading{display:grid;grid-template-columns:1fr;align-items:stretch;gap:.45rem}
+.record-actions{display:flex;align-items:center;justify-content:space-between;gap:.7rem}
+.record-title h1{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;margin:0;overflow-wrap:anywhere}
+.record-meta{min-width:0;flex-wrap:wrap}
+.record-meta>span:first-child{min-width:0;overflow-wrap:anywhere}
+
+@media(max-width:780px){
+ .card-copy-actions{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(82px,1fr));gap:.35rem!important;width:100%}
+ .card-copy-actions button{width:100%;min-width:0;min-height:42px;padding:.35rem .3rem;font-size:.67rem;line-height:1.12;white-space:normal}
+ .card-copy-actions svg{width:14px;height:14px;flex:0 0 auto}
+ .record-heading{grid-template-columns:1fr;gap:.35rem;margin-bottom:.7rem}
+ .record-actions{grid-column:1;grid-row:1}
+ .record-title{grid-column:1;grid-row:2}
+ .record-meta{grid-column:1;grid-row:3;gap:.25rem;font-size:.78rem}
+ .record-heading .back-button,.record-heading .edit-commerce{min-height:42px;padding:.4rem .65rem;font-size:.78rem}
+ .record-title h1{font-size:1.35rem;line-height:1.2}
+}
+
+@media(max-width:390px){
+ .card-copy-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .card-copy-actions button{width:100%;font-size:.64rem}
+ .record-title h1{font-size:1.2rem}
+ .record-heading .edit-commerce svg{display:none}
+}

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -53,7 +53,7 @@ describe('ficha offline', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Ferretería El Águila' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Volver a Comercios/u })).toHaveAttribute('href', '/comercios?campo=SeriePOS&q=ABC&pagina=2');
+    expect(screen.getByRole('link', { name: '← Volver' })).toHaveAttribute('href', '/comercios?campo=SeriePOS&q=ABC&pagina=2');
     expect(screen.getByText('00077')).toBeInTheDocument();
     expect(screen.getByText('SERIE-ABC-09')).toBeInTheDocument();
     expect(screen.getByText('INV-001')).toBeInTheDocument();
@@ -63,8 +63,10 @@ describe('ficha offline', () => {
     expect(writeText).toHaveBeenCalledWith('00001234');
     expect(screen.getByRole('status')).toHaveTextContent('Terminal: Copiado');
     expect(Array.from(document.querySelectorAll('.primary-field-grid .field')).map((element) => element.getAttribute('data-field'))).toEqual([
-      'NombreComercial', 'Terminal', 'SeriePOS', 'Atendio', 'Celular', 'Correo', 'RedSimcard', 'SerieSimcard'
+      'NombreComercial', 'CodigoComercio', 'Terminal', 'SeriePOS', 'Atendio', 'Celular', 'Correo', 'SerieSimcard'
     ]);
+    const connectivity = screen.getByText('Conectividad').closest('details')!;
+    expect(within(connectivity).getByText('Red SIM')).toBeInTheDocument();
     for (const section of ['Comercio y ubicación', 'Equipo POS', 'Conectividad', 'Contacto y gestión', 'Campos adicionales']) {
       expect(screen.getByText(section)).toBeInTheDocument();
     }

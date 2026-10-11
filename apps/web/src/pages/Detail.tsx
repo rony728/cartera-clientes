@@ -10,7 +10,7 @@ import { Icon } from '../components/Icon';
 import { CommercePhoto } from '../components/CommercePhoto';
 import type { CommerceRouteState } from '../navigation';
 
-const MAIN_FIELDS=['NombreComercial','Terminal','SeriePOS','Atendio','Celular','Correo','RedSimcard','SerieSimcard'];
+const MAIN_FIELDS=['NombreComercial','CodigoComercio','Terminal','SeriePOS','Atendio','Celular','Correo','SerieSimcard'];
 const SECONDARY_GROUPS=[
  {name:'Comercio y ubicación',matches:(field:string)=>metaFor(field).group==='Comercio'},
  {name:'Equipo POS',matches:(field:string)=>metaFor(field).group==='Terminal y equipo'},
@@ -35,7 +35,7 @@ export default function Detail(){
  const entries=Object.entries(t.datos_excel).filter(([key])=>!INTERNAL_FIELDS.has(key)&&!MAIN_FIELDS.includes(key));
  const valueFor=(field:string)=>field==='Terminal'?t.terminal:excelValue(t.datos_excel,field);
  return <section className="detail-page">
-  <header className="record-heading"><Link className="button back-button" to={`/comercios${search}`} state={returnState}>← Volver a Comercios</Link><div className="record-title"><h1>{String(valueFor('NombreComercial')||'Comercio sin nombre')}</h1><div className="record-meta"><span>Terminal <strong>{t.terminal}</strong></span><button type="button" className="icon-button" aria-label="Copiar Terminal" onClick={()=>void copy('HeaderTerminal',t.terminal)}><Icon name="copy"/></button><span className={`badge ${t.activa?'success':'muted'}`}>{t.activa?'Activa':'Inactiva'}</span></div></div>{t.activa&&!offline&&<Link className="button primary edit-commerce" to="editar" state={{search,restoreScroll:routeState?.restoreScroll}}><Icon name="edit"/>Editar comercio</Link>}</header>
+  <header className="record-heading"><div className="record-actions"><Link className="button back-button" to={`/comercios${search}`} state={returnState}>← Volver</Link>{t.activa&&!offline&&<Link className="button primary edit-commerce" to="editar" state={{search,restoreScroll:routeState?.restoreScroll}}><Icon name="edit"/>Editar comercio</Link>}</div><div className="record-title"><h1>{String(valueFor('NombreComercial')||'Comercio sin nombre')}</h1></div><div className="record-meta"><span>Terminal <strong>{t.terminal}</strong></span><button type="button" className="icon-button" aria-label="Copiar Terminal" onClick={()=>void copy('HeaderTerminal',t.terminal)}><Icon name="copy"/></button><span className={`badge ${t.activa?'success':'muted'}`}>{t.activa?'Activa':'Inactiva'}</span></div></header>
   {routeState?.message&&<div className="alert" role="status">{routeState.message}</div>}
   <section className="primary-data" aria-labelledby="primary-data-title"><h2 id="primary-data-title">Datos principales</h2><div className="field-grid primary-field-grid">{MAIN_FIELDS.map(field=><DetailField key={field} field={field} value={valueFor(field)} copied={copied===field} onCopy={()=>void copy(field,valueFor(field))}/>)}</div></section>
   <div className="detail-groups">{SECONDARY_GROUPS.map(group=>{const values=entries.filter(([key])=>group.matches(key));return <details open={group.name==='Comercio y ubicación'} key={group.name}><summary>{group.name}</summary>{values.length?<div className="field-grid">{values.map(([key,value])=><DetailField key={key} field={key} value={value} copied={copied===key} onCopy={()=>void copy(key,value)}/>)}</div>:<p className="muted">Sin datos adicionales en esta sección.</p>}</details>;})}</div>

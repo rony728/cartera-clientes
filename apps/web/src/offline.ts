@@ -153,7 +153,22 @@ export async function getColumns(userId: UserIdentifier, defaults: string[]) {
 }
 
 export async function saveColumns(userId: UserIdentifier, columns: string[]) {
-  await (await dbPromise).put('preferences', { key: `columns:${canonicalUserId(userId)}`, columns });
+  const db = await dbPromise;
+  const key = `columns:${canonicalUserId(userId)}`;
+  const preference = await db.get('preferences', key);
+  await db.put('preferences', { ...preference, key, columns });
+}
+
+export async function getColumnWidths(userId: UserIdentifier) {
+  const preference = await (await dbPromise).get('preferences', `columns:${canonicalUserId(userId)}`);
+  return (preference?.widths || {}) as Record<string,number>;
+}
+
+export async function saveColumnWidths(userId: UserIdentifier, widths: Record<string,number>) {
+  const db = await dbPromise;
+  const key = `columns:${canonicalUserId(userId)}`;
+  const preference = await db.get('preferences', key);
+  await db.put('preferences', { ...preference, key, widths });
 }
 
 export async function allOffline(userId: UserIdentifier): Promise<Terminal[]> {

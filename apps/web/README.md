@@ -56,7 +56,7 @@ Consulta [../../docs/frontend-architecture.md](../../docs/frontend-architecture.
 
 ## Comportamiento UX y regresión
 
-La lista usa tarjetas en móvil y una tabla de ancho controlado en escritorio. Las columnas configurables conservan visibilidad y orden por usuario; al habilitar muchas columnas, la tabla mantiene desplazamiento horizontal, foco visible y una indicación textual. Los valores completos siguen disponibles mediante el atributo `title` en celdas truncadas.
+La lista usa tarjetas en móvil y una tabla de ancho controlado en escritorio. Las columnas configurables conservan visibilidad, orden y anchos ajustados por usuario en el mismo registro de preferencias de IndexedDB; los separadores del encabezado admiten arrastre y las flechas izquierda/derecha del teclado. Al habilitar o ensanchar muchas columnas, la tabla mantiene desplazamiento horizontal, foco visible y una indicación textual. Los valores completos siguen disponibles mediante el atributo `title` en celdas truncadas.
 
 Al abrir una ficha se guarda la posición vertical junto con una clave canónica de la URL de Comercios. Volver desde la ficha —incluido el recorrido por edición y Cancelar— restaura la posición solo si búsqueda, campo, filtros, estado, orden, dirección y página siguen siendo exactamente los mismos. El historial del navegador conserva el mismo marcador; un contexto diferente lo descarta para no reutilizar posiciones antiguas.
 
