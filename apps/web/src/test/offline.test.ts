@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearUserData,
+  getColumns,
+  getColumnWidths,
   getOfflineAuth,
   offlineFilterOptions,
   offlineTerminal,
   replaceOfflineTerminals,
+  saveColumns,
+  saveColumnWidths,
   saveOfflineAuth,
   searchOffline
 } from '../offline';
@@ -73,6 +77,17 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('consulta offline', () => {
+  it('conserva columnas y anchos en la misma preferencia por usuario', async () => {
+    await saveColumns('u1', ['Inventario', 'SeriePOS']);
+    await saveColumnWidths('u1', { NombreComercial: 320, Inventario: 140 });
+
+    expect(await getColumns('u1', [])).toEqual(['Inventario', 'SeriePOS']);
+    expect(await getColumnWidths('u1')).toEqual({ NombreComercial: 320, Inventario: 140 });
+
+    await saveColumns('u1', ['SeriePOS']);
+    expect(await getColumnWidths('u1')).toEqual({ NombreComercial: 320, Inventario: 140 });
+  });
+
   it('encuentra un nombre comercial sin distinguir mayúsculas ni tildes', async () => {
     await replaceOfflineTerminals('u1', rows);
 

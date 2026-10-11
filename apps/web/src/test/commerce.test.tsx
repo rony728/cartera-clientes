@@ -1,5 +1,5 @@
 import { QueryClient,QueryClientProvider } from '@tanstack/react-query';
-import { act,render,screen,waitFor } from '@testing-library/react';
+import { act,fireEvent,render,screen,waitFor,within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link,MemoryRouter,Route,Routes,useLocation,type InitialEntry } from 'react-router-dom';
 import { beforeEach,describe,expect,it,vi } from 'vitest';
@@ -13,7 +13,9 @@ const mocks=vi.hoisted(()=>({
  searchOffline:vi.fn(),
  writeText:vi.fn(),
  getColumns:vi.fn(),
+ getColumnWidths:vi.fn(),
  saveColumns:vi.fn(),
+ saveColumnWidths:vi.fn(),
  exportTerminals:vi.fn(),
  user:{id:'1',nombre:'Prueba',usuario:'prueba',rol:'ADMIN',autenticado:true},
  offline:false
@@ -23,11 +25,11 @@ vi.mock('../Auth',()=>({useAuth:()=>({user:mocks.user,offline:mocks.offline})}))
 vi.mock('../api',()=>({api:mocks.api,searchTerminals:mocks.searchTerminals}));
 vi.mock('../offline',async(importOriginal)=>{
  const actual=await importOriginal<typeof import('../offline')>();
- return {...actual,downloadOffline:vi.fn(),getColumns:mocks.getColumns,offlineFilterOptions:vi.fn().mockResolvedValue({datos:{},campos:[]}),offlineMeta:vi.fn().mockResolvedValue(null),saveColumns:mocks.saveColumns,searchOffline:mocks.searchOffline};
+ return {...actual,downloadOffline:vi.fn(),getColumns:mocks.getColumns,getColumnWidths:mocks.getColumnWidths,offlineFilterOptions:vi.fn().mockResolvedValue({datos:{},campos:[]}),offlineMeta:vi.fn().mockResolvedValue(null),saveColumns:mocks.saveColumns,saveColumnWidths:mocks.saveColumnWidths,searchOffline:mocks.searchOffline};
 });
 vi.mock('../export',()=>({exportTerminals:mocks.exportTerminals}));
 
-const terminal:Terminal={terminal:'00001234',activa:true,version:'1',datos_excel:{NombreComercial:'Café Central',SeriePOS:'SER-0007',Inventario:'INV-0042',Ciudad:'Danlí',CodigoComercio:''}};
+const terminal:Terminal={terminal:'00001234',activa:true,version:'1',datos_excel:{NombreComercial:'Café Central',SeriePOS:'SER-0007',Inventario:'INV-0042',Ciudad:'Danlí',CodigoComercio:'00077',Correo:'ana@example.com',Celular:'09990000',Atendio:'Ana López',SerieSimcard:'0000004567',RedSimcard:'Tigo'}};
 const page={datos:[terminal],paginacion:{pagina:1,limite:20,total:1,total_paginas:2}};
 
 function renderCommerce(entry:InitialEntry='/comercios'){
@@ -52,7 +54,9 @@ describe('interfaz de Comercios',()=>{
   mocks.searchOffline.mockReset().mockResolvedValue(page);
   mocks.writeText.mockReset().mockResolvedValue(undefined);
   mocks.getColumns.mockReset().mockResolvedValue(['Inventario','SeriePOS']);
+  mocks.getColumnWidths.mockReset().mockResolvedValue({NombreComercial:300});
   mocks.saveColumns.mockReset().mockResolvedValue(undefined);
+  mocks.saveColumnWidths.mockReset().mockResolvedValue(undefined);
   mocks.exportTerminals.mockReset().mockResolvedValue(undefined);
   mocks.offline=false;
   Object.defineProperty(window,'scrollY',{configurable:true,value:0});
@@ -94,21 +98,37 @@ describe('interfaz de Comercios',()=>{
   expect(screen.getByText('Columnas visibles')).toBeInTheDocument();
  });
 
- it('copia identificadores sin activar la navegación de la tarjeta',async()=>{
+ it('muestra Celular y copia las siete acciones móviles en el orden requerido',async()=>{
   const user=userEvent.setup();
   const writeText=vi.spyOn(navigator.clipboard,'writeText').mockResolvedValue(undefined);
   renderCommerce();
   const commerceLink=await screen.findByRole('link',{name:'Café Central'});
   expect(commerceLink).toHaveAttribute('href','/comercios/00001234');
-  await user.click(screen.getByRole('button',{name:'Copiar Terminal'}));
+  const card=commerceLink.closest('article')!;
+  const cardFields=card.querySelector('dl')!;
+  expect(within(cardFields).getByText('Celular')).toBeInTheDocument();
+  expect(within(cardFields).queryByText('Red SIM')).not.toBeInTheDocument();
+  const copyActions=card.querySelector<HTMLElement>('.card-copy-actions')!;
+  expect(within(copyActions).getAllByRole('button').map(button=>button.getAttribute('aria-label'))).toEqual([
+   'Copiar Terminal','Copiar Correo','Copiar Celular','Copiar Atendió','Copiar Código','Copiar Serie SIM','Copiar Serie POS'
+  ]);
+  expect(within(card).queryByRole('button',{name:'Copiar Inventario'})).not.toBeInTheDocument();
+  await user.click(within(card).getByRole('button',{name:'Copiar Terminal'}));
   expect(writeText).toHaveBeenLastCalledWith('00001234');
   expect(screen.getByRole('status')).toHaveTextContent('Terminal: Copiado');
-  await user.click(screen.getByRole('button',{name:'Copiar Serie POS'}));
+  await user.click(within(card).getByRole('button',{name:'Copiar Serie POS'}));
   expect(writeText).toHaveBeenLastCalledWith('SER-0007');
-  await user.click(screen.getByRole('button',{name:'Copiar Inventario'}));
-  expect(writeText).toHaveBeenLastCalledWith('INV-0042');
+  await user.click(within(card).getByRole('button',{name:'Copiar Código'}));
+  expect(writeText).toHaveBeenLastCalledWith('00077');
   expect(screen.getByRole('heading',{name:'Café Central'})).toBeInTheDocument();
-  expect(screen.getAllByText('Sin dato').length).toBeGreaterThan(0);
+ });
+
+ it('oculta una acción de copia cuando el valor está vacío',async()=>{
+  mocks.searchTerminals.mockResolvedValue({...page,datos:[{...terminal,datos_excel:{...terminal.datos_excel,Correo:'  '}}]});
+  renderCommerce();
+  const card=(await screen.findByRole('link',{name:'Café Central'})).closest('article')!;
+  expect(within(card).queryByRole('button',{name:'Copiar Correo'})).not.toBeInTheDocument();
+  expect(within(card).getByRole('button',{name:'Copiar Celular'})).toBeInTheDocument();
  });
 
  it('mantiene filtros al paginar y conserva la búsqueda offline por campo',async()=>{
@@ -153,6 +173,22 @@ describe('interfaz de Comercios',()=>{
   expect(screen.getByRole('button',{name:'Ordenar por Terminal'}).closest('th')).toHaveAttribute('aria-sort','none');
   await user.click(nameSort);
   expect(await screen.findByRole('button',{name:'Ordenar por Nombre comercial, actualmente descendente'})).toBeInTheDocument();
+ });
+
+ it('restaura y persiste el ancho de columna sin activar el ordenamiento',async()=>{
+  renderCommerce();
+  await screen.findByRole('link',{name:'Café Central'});
+  await waitFor(()=>expect(mocks.getColumnWidths).toHaveBeenCalledWith('1'));
+  const separator=screen.getByRole('separator',{name:'Redimensionar Nombre comercial'});
+  expect(separator).toHaveAttribute('aria-valuenow','300');
+  fireEvent.keyDown(separator,{key:'ArrowRight'});
+  await waitFor(()=>expect(mocks.saveColumnWidths).toHaveBeenLastCalledWith('1',expect.objectContaining({NombreComercial:310})));
+  expect(screen.getByRole('button',{name:'Ordenar por Nombre comercial, actualmente ascendente'})).toBeInTheDocument();
+  fireEvent.pointerDown(separator,{clientX:100});
+  fireEvent.pointerMove(window,{clientX:160});
+  fireEvent.pointerUp(window,{clientX:160});
+  await waitFor(()=>expect(mocks.saveColumnWidths).toHaveBeenLastCalledWith('1',expect.objectContaining({NombreComercial:370})));
+  expect(document.querySelector('.commerce-table col')).toHaveStyle({width:'370px'});
  });
 
  it('consulta todas las variantes equivalentes online sin alterar los valores',async()=>{
