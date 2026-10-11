@@ -123,6 +123,9 @@ describe('flujo completo online → offline → online', () => {
     await waitFor(async () => expect((await offlineMeta('1'))?.count).toBe(1_000));
 
     const search = screen.getByRole('textbox', { name: 'Buscar comercios' });
+    const searchField = screen.getByRole('combobox', { name: 'Buscar en' });
+    expect(searchField).toHaveValue('NombreComercial');
+    await user.selectOptions(searchField, 'terminal');
     await user.type(search, '00000284');
     await waitForDebounce();
     expect(await screen.findByRole('link', { name: /Ferretería Terminal 284/u })).toBeInTheDocument();
@@ -140,11 +143,13 @@ describe('flujo completo online → offline → online', () => {
     expect(screen.getByText('1 resultados')).toBeInTheDocument();
 
     await user.clear(search);
+    await user.selectOptions(searchField, 'SeriePOS');
     await user.type(search, 'serie-especial-284');
     await waitForDebounce();
     expect(await screen.findByRole('link', { name: /Ferretería Terminal 284/u })).toBeInTheDocument();
 
     await user.clear(search);
+    await user.selectOptions(searchField, 'terminal');
     await user.type(search, '00000284');
     await waitForDebounce();
     await user.click(await screen.findByRole('link', { name: /Ferretería Terminal 284/u }));

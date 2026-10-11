@@ -1,6 +1,7 @@
 import { openDB } from 'idb';
 import { searchTerminals } from './api';
 import { FILTER_FIELDS, INTERNAL_FIELDS } from './fields';
+import { groupEquivalentValues,normalizeCategoryKey } from './normalization';
 import type { ExcelData, Page, SearchState, Terminal, User } from './types';
 
 const dbPromise = openDB('cartera-clientes', 1, {
@@ -174,7 +175,7 @@ export async function offlineFilterOptions(userId: UserIdentifier) {
       .filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
       .map(String)))
       .sort(collator.compare);
-    return [field, values];
+    return [field, groupEquivalentValues(values).map((group) => group.value)];
   }));
   return { datos, campos: fields };
 }
@@ -200,7 +201,7 @@ export async function searchOffline(userId: UserIdentifier, state: SearchState):
   }
 
   rows = rows.filter((terminal) => Object.entries(state.filtros).every(([field, value]) => (
-    !value || normalizeOfflineText(excelValue(terminal.datos_excel, field)) === normalizeOfflineText(value)
+    !value || normalizeCategoryKey(excelValue(terminal.datos_excel, field)) === normalizeCategoryKey(value)
   )));
 
   const sortValue = (terminal: Terminal) => String(
