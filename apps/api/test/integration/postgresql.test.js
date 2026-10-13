@@ -404,6 +404,36 @@ test('consultas auxiliares y edición de terminales funcionan con PostgreSQL rea
   assert.equal(conflict.current.datos_excel.Ciudad, 'Tegucigalpa');
 });
 
+test('edita datos internos sin cola y los preserva durante una importación Excel', async () => {
+  await importer(syntheticSnapshot([
+    { Terminal: 'INT-001', NombreComercial: 'Comercio inicial', Ciudad: 'Danlí' }
+  ]));
+  const user = await pool.query({
+    text: `INSERT INTO public.usuarios (nombre, usuario, password_hash, rol)
+      VALUES ('Editor interno', 'editor_interno', 'hash-sintético', 'USUARIO') RETURNING id`
+  });
+  const updated = await terminalRepository.updateTerminal(pool, {
+    terminal: 'INT-001', version: 1, changes: {},
+    internalChanges: { ubicacion_interna: 'Pista', referencia_interna: 'Frente a farmacia' },
+    userId: user.rows[0].id
+  });
+  assert.equal(updated.kind, 'updated');
+  assert.equal(updated.queue.length, 0);
+  assert.equal(updated.terminal.ubicacion_interna, 'Pista');
+  assert.equal((await pool.query("SELECT count(*)::int AS total FROM public.cola_sincronizacion WHERE terminal = 'INT-001'")).rows[0].total, 0);
+  assert.equal((await pool.query("SELECT count(*)::int AS total FROM public.historial_cambios WHERE terminal = 'INT-001' AND origen = 'PWA'")).rows[0].total, 2);
+
+  await importer(syntheticSnapshot([
+    { Terminal: 'INT-001', NombreComercial: 'Comercio actualizado', Ciudad: 'Danlí' }
+  ], new Date(Date.now() + 1000)));
+  const preserved = await terminalRepository.updateTerminal(pool, {
+    terminal: 'INT-001', version: 3, changes: {}, internalChanges: {}, userId: user.rows[0].id
+  });
+  assert.equal(preserved.kind, 'unchanged');
+  assert.equal(preserved.terminal.ubicacion_interna, 'Pista');
+  assert.equal(preserved.terminal.referencia_interna, 'Frente a farmacia');
+});
+
 test('HTTP real persiste e invalida sesiones y aplica ADMIN, USUARIO, CSRF e importación deshabilitada', async () => {
   const password = 'Integracion-Segura-123!';
   const passwordHash = await hashPassword(password);

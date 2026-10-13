@@ -1,7 +1,9 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 
-const TECHNICAL_FIELDS = new Set(['ItemInternalId', '@odata.etag']);
+const TECHNICAL_FIELDS = new Set([
+  'ItemInternalId', '@odata.etag', 'ubicacion_interna', 'referencia_interna'
+]);
 
 class SnapshotError extends Error {
   constructor(code, message, options = {}) {

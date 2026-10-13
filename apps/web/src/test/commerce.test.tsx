@@ -29,7 +29,7 @@ vi.mock('../offline',async(importOriginal)=>{
 });
 vi.mock('../export',()=>({exportTerminals:mocks.exportTerminals}));
 
-const terminal:Terminal={terminal:'00001234',activa:true,version:'1',datos_excel:{NombreComercial:'Café Central',SeriePOS:'SER-0007',Inventario:'INV-0042',Ciudad:'Danlí',CodigoComercio:'00077',Correo:'ana@example.com',Celular:'09990000',Atendio:'Ana López',SerieSimcard:'0000004567',RedSimcard:'Tigo'}};
+const terminal:Terminal={terminal:'00001234',activa:true,version:'1',ubicacion_interna:'Pista',referencia_interna:'Frente a farmacia',datos_excel:{NombreComercial:'Café Central',SeriePOS:'SER-0007',Inventario:'INV-0042',Ciudad:'Danlí',CodigoComercio:'00077',Correo:'ana@example.com',Celular:'09990000',Atendio:'Ana López',SerieSimcard:'0000004567',RedSimcard:'Tigo'}};
 const page={datos:[terminal],paginacion:{pagina:1,limite:20,total:1,total_paginas:2}};
 
 function renderCommerce(entry:InitialEntry='/comercios'){
@@ -121,6 +121,17 @@ describe('interfaz de Comercios',()=>{
   await user.click(within(card).getByRole('button',{name:'Copiar Código'}));
   expect(writeText).toHaveBeenLastCalledWith('00077');
   expect(screen.getByRole('heading',{name:'Café Central'})).toBeInTheDocument();
+  expect(within(card).getByText('Pista')).toHaveClass('internal-location');
+  const tableName=document.querySelector('.commerce-name-cell');
+  expect(tableName).toHaveTextContent('Café Central');
+  expect(tableName).toHaveTextContent('Pista');
+ });
+
+ it('no reserva la línea de ubicación interna cuando está vacía',async()=>{
+  mocks.searchTerminals.mockResolvedValue({...page,datos:[{...terminal,ubicacion_interna:null}]});
+  renderCommerce();
+  const card=(await screen.findByRole('link',{name:'Café Central'})).closest('article')!;
+  expect(card.querySelector('.internal-location')).toBeNull();
  });
 
  it('oculta una acción de copia cuando el valor está vacío',async()=>{

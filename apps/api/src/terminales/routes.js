@@ -2,7 +2,11 @@ const express = require('express');
 const { buildPowerAutomateV2Mail } = require('../mail');
 const { findTerminal, searchTerminales } = require('./queries');
 const repository = require('./repository');
-const { INTERNAL_FIELDS, POWER_AUTOMATE_FIELD_SET } = require('./fields');
+const {
+  INTERNAL_FIELDS,
+  POWER_AUTOMATE_FIELD_SET,
+  PWA_INTERNAL_FIELD_SET
+} = require('./fields');
 const { ValidationError, parseSearchParams, validateTerminalParam } = require('./validation');
 
 function handleError(res, error) {
@@ -31,14 +35,17 @@ function validateChanges(body) {
     throw new ValidationError('Los cambios no son válidos.');
   }
   const entries = Object.entries(body.cambios);
-  if (entries.length < 1 || entries.length > POWER_AUTOMATE_FIELD_SET.size) {
+  if (entries.length < 1 || entries.length > POWER_AUTOMATE_FIELD_SET.size + PWA_INTERNAL_FIELD_SET.size) {
     throw new ValidationError('La cantidad de cambios no es válida.');
   }
   for (const [field, value] of entries) {
-    if (!field || field.length > 120 || INTERNAL_FIELDS.has(field) || /[\u0000-\u001F\u007F]/u.test(field)) {
+    if (!field || field.length > 120 || /[\u0000-\u001F\u007F]/u.test(field)) {
       throw new ValidationError(`El campo ${field || '(vacío)'} no se puede editar.`);
     }
-    if (!POWER_AUTOMATE_FIELD_SET.has(field)) {
+    if (!POWER_AUTOMATE_FIELD_SET.has(field) && !PWA_INTERNAL_FIELD_SET.has(field)) {
+      if (INTERNAL_FIELDS.has(field)) {
+        throw new ValidationError(`El campo ${field} no se puede editar.`);
+      }
       throw new ValidationError(`El campo ${field} todavía no admite propagación a Excel.`);
     }
     if (value !== null && typeof value !== 'string') {
@@ -48,7 +55,11 @@ function validateChanges(body) {
       throw new ValidationError(`El valor de ${field} es demasiado largo.`);
     }
   }
-  return { version: body.version, changes: Object.fromEntries(entries) };
+  return {
+    version: body.version,
+    changes: Object.fromEntries(entries.filter(([field]) => POWER_AUTOMATE_FIELD_SET.has(field))),
+    internalChanges: Object.fromEntries(entries.filter(([field]) => PWA_INTERNAL_FIELD_SET.has(field)))
+  };
 }
 
 function createTerminalesRouter({ pool, csrfProtection, sendMailFn, repositoryApi = repository }) {
@@ -129,9 +140,9 @@ function createTerminalesRouter({ pool, csrfProtection, sendMailFn, repositoryAp
   router.patch('/:terminal', csrfProtection, async (req, res) => {
     try {
       const terminal = validateTerminalParam(req.params.terminal);
-      const { version, changes } = validateChanges(req.body);
+      const { version, changes, internalChanges } = validateChanges(req.body);
       const result = await repositoryApi.updateTerminal(pool, {
-        terminal, version, changes, userId: req.user.id
+        terminal, version, changes, internalChanges, userId: req.user.id
       });
       if (result.kind === 'not_found') return res.status(404).json({ ok: false, mensaje: 'Terminal no encontrada.' });
       if (result.kind === 'inactive') return res.status(409).json({ ok: false, codigo: 'TERMINAL_INACTIVA', mensaje: 'Una terminal inactiva no se puede editar.' });
@@ -143,6 +154,13 @@ function createTerminalesRouter({ pool, csrfProtection, sendMailFn, repositoryAp
         terminal: result.terminal,
         propagacion: [],
         envio_excel: { estado: 'SIN_CAMBIOS', campos: [] }
+      });
+
+      if (result.queue.length === 0) return res.status(200).json({
+        ok: true,
+        terminal: result.terminal,
+        propagacion: [],
+        envio_excel: { estado: 'NO_APLICA', campos: [] }
       });
 
       const operationId = result.queue[0].operacion_id;

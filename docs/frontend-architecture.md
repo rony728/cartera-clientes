@@ -14,7 +14,7 @@ Online, cada búsqueda consulta PostgreSQL con páginas de 20, debounce de 300 m
 
 IndexedDB separa terminales, preferencias y autorización por usuario. El acceso offline dura 24 horas desde la última autorización online. Logout elimina los datos de ese usuario. Offline es de solo lectura: edición, historial remoto, dashboard, usuarios y sincronización requieren conexión. Hoy se usa descarga completa consistente; la sincronización incremental queda pendiente.
 
-La consulta offline recorre todos los registros de la copia local y aplica primero estado, búsqueda y filtros, luego orden y paginación. La búsqueda general examina Terminal y valores comerciales, nunca nombres de propiedades; normaliza mayúsculas y tildes, conserva identificadores como texto y admite nombres de campo equivalentes con diferencias de espacios o acentos. Las opciones de filtros y columnas se obtienen de IndexedDB cuando no hay conexión. Los filtros persistidos en la URL se muestran con un contador y pueden limpiarse desde el estado vacío. Las fichas completas se resuelven directamente por Terminal desde IndexedDB.
+La consulta offline recorre todos los registros de la copia local y aplica primero estado, búsqueda y filtros, luego orden y paginación. La búsqueda general examina Terminal, valores comerciales, `ubicacion_interna` y `referencia_interna`, nunca nombres de propiedades; normaliza mayúsculas y tildes, conserva identificadores como texto y admite nombres de campo equivalentes con diferencias de espacios o acentos. Las opciones de filtros y columnas se obtienen de IndexedDB cuando no hay conexión. Los filtros persistidos en la URL se muestran con un contador y pueden limpiarse desde el estado vacío. Las fichas completas se resuelven directamente por Terminal desde IndexedDB. Los objetos anteriores que todavía no contienen los campos internos siguen siendo válidos, por lo que no fue necesario cambiar la versión del esquema IndexedDB.
 
 La normalización de categorías es una capa de presentación y comparación: recorta espacios externos, compara sin distinguir mayúsculas/minúsculas y agrupa equivalencias seguras. Nunca reescribe `datos_excel`. Offline compara la clave normalizada. Online, como la API conserva filtros exactos, el adaptador consulta cada variante observada, deduplica por Terminal, ordena y pagina en memoria. Así se mantiene el contrato, con el costo documentado de lecturas adicionales cuando un grupo tiene variantes.
 
@@ -26,9 +26,11 @@ El service worker precachea el shell y dependencias locales. Las llamadas `/api/
 
 ## Edición, historial y Excel
 
-`PATCH /api/v1/terminales/:terminal` exige sesión, CSRF y versión. Actualiza PostgreSQL, historial y cola en una transacción. Un conflicto HTTP 409 devuelve la versión vigente sin sobrescribir el formulario local. Terminal e internos no son editables. Los 23 campos configurados en Power Automate se pueden editar; campos JSONB desconocidos continúan visibles, pero son de solo lectura.
+`PATCH /api/v1/terminales/:terminal` exige sesión, CSRF y versión. Actualiza PostgreSQL e historial en una transacción. Un conflicto HTTP 409 devuelve la versión vigente sin sobrescribir el formulario local. Terminal y campos técnicos no son editables. Los 23 campos configurados en Power Automate se pueden editar; campos JSONB desconocidos continúan visibles, pero son de solo lectura. `ubicacion_interna` y `referencia_interna` son columnas nulas de `terminales`, se editan por el mismo endpoint y generan historial PWA sin crear cola, correo ni conflicto de Excel.
 
-Cada guardado transmite únicamente diferencias efectivas en un correo `ACTUALIZAR_CARTERA_V2`, aunque cambien varios campos. La PWA distingue guardado PostgreSQL de `ENVIADO`, `ERROR` o `INCIERTO`. Correo aceptado significa `ENVIADO`, no confirmado: la confirmación depende de un snapshot posterior. El endpoint V1 de `Celular` se conserva, pero no interviene en el flujo de edición. Consulta [power-automate-v2.md](power-automate-v2.md).
+Cada guardado transmite únicamente las diferencias efectivas de campos Excel en un correo `ACTUALIZAR_CARTERA_V2`, aunque cambien varios campos. Los cambios internos quedan fuera del mensaje, incluso en una edición mixta. La PWA distingue el guardado solo interno (`NO_APLICA`) de `ENVIADO`, `ERROR` o `INCIERTO`. Correo aceptado significa `ENVIADO`, no confirmado: la confirmación depende de un snapshot posterior. El endpoint V1 de `Celular` se conserva, pero no interviene en el flujo de edición. Consulta [power-automate-v2.md](power-automate-v2.md).
+
+La importación ignora defensivamente nombres internos que pudieran aparecer en un snapshot y solo reemplaza `datos_excel`; por ello nunca sobrescribe las columnas internas. La migración `003_internal_terminal_fields.sql` agrega ambas columnas sin `NOT NULL`, valores por defecto ni actualización masiva.
 
 ## Exportación, escáner y fotografías
 
@@ -46,7 +48,7 @@ ZXing se carga bajo demanda, funciona desde recursos instalados y procesa video 
 - `PATCH /api/v1/terminales/:terminal`
 - `POST /api/v1/auth/password`
 
-Se reutilizan autenticación, usuarios, terminales y sincronizaciones existentes. No hay migraciones nuevas.
+Se reutilizan autenticación, usuarios, terminales y sincronizaciones existentes. La única migración de esta etapa es `003_internal_terminal_fields.sql`.
 
 El Dashboard muestra la importación solo a `ADMIN`. Solicita confirmación antes del POST, envía `confirmar_importacion: true` con el token CSRF en memoria y, si el servidor detecta más del 10% de ausencias, exige una segunda confirmación antes de reenviar `confirmar_inactivacion_masiva: true`.
 

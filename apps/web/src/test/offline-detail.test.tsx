@@ -19,6 +19,8 @@ beforeEach(async () => {
     terminal: '00001234',
     activa: true,
     version: '5',
+    ubicacion_interna: 'Pista',
+    referencia_interna: 'Entrada lateral frente a farmacia',
     datos_excel: {
       NombreComercial: 'Ferretería El Águila',
       CodigoComercio: '00077',
@@ -53,6 +55,10 @@ describe('ficha offline', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Ferretería El Águila' })).toBeInTheDocument();
+    expect(screen.getByText('Pista')).toBeInTheDocument();
+    const commerceLocation = screen.getByText('Comercio y ubicación').closest('details')!;
+    expect(within(commerceLocation).getByText('Referencia interna')).toBeInTheDocument();
+    expect(within(commerceLocation).getByText('Entrada lateral frente a farmacia')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '← Volver' })).toHaveAttribute('href', '/comercios?campo=SeriePOS&q=ABC&pagina=2');
     expect(screen.getByText('00077')).toBeInTheDocument();
     expect(screen.getByText('SERIE-ABC-09')).toBeInTheDocument();

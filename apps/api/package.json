@@ -5,7 +5,7 @@
   "description": "API de cartera de clientes con PostgreSQL, sesiones y Microsoft Graph",
   "main": "src/mail.js",
   "scripts": {
-    "test": "node --test test/terminales.test.js test/sincronizaciones.test.js test/auth.test.js test/security-config.test.js test/test-database-safety.test.js",
+    "test": "node --test test/terminales.test.js test/sincronizaciones.test.js test/auth.test.js test/security-config.test.js test/test-database-safety.test.js test/migrations.test.js",
     "test:integration": "node scripts/test-db-check.js && node --test --test-concurrency=1 test/integration/postgresql.test.js",
     "test:db:check": "node scripts/test-db-check.js",
     "test:db:setup": "node scripts/test-db-setup.js",

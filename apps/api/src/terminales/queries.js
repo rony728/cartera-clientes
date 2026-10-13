@@ -1,4 +1,4 @@
-const { FILTER_FIELDS, SEARCH_FIELDS } = require('./fields');
+const { FILTER_FIELDS, PWA_INTERNAL_FIELD_SET, SEARCH_FIELDS } = require('./fields');
 
 function escapeLike(value) {
   return value.replace(/[\\%_]/gu, (character) => `\\${character}`);
@@ -24,12 +24,19 @@ function buildSearchQuery(filters) {
     const pattern = addValue(escapeLike(filters.q));
     if (filters.campo === 'todos') {
       conditions.push(`(t.terminal ILIKE '%' || ${pattern} || '%' ESCAPE '\\'
+        OR t.ubicacion_interna ILIKE '%' || ${pattern} || '%' ESCAPE '\\'
+        OR t.referencia_interna ILIKE '%' || ${pattern} || '%' ESCAPE '\\'
         OR EXISTS (
           SELECT 1 FROM jsonb_each_text(t.datos_excel) AS property
           WHERE property.value ILIKE '%' || ${pattern} || '%' ESCAPE '\\'
         ))`);
     } else if (filters.campo === 'terminal') {
       conditions.push(`t.terminal ILIKE '%' || ${pattern} || '%' ESCAPE '\\'`);
+    } else if (PWA_INTERNAL_FIELD_SET.has(filters.campo)) {
+      const column = filters.campo === 'ubicacion_interna'
+        ? 't.ubicacion_interna'
+        : 't.referencia_interna';
+      conditions.push(`${column} ILIKE '%' || ${pattern} || '%' ESCAPE '\\'`);
     } else {
       const key = addValue(filters.campo);
       conditions.push(`(t.datos_excel ->> ${key}) ILIKE '%' || ${pattern} || '%' ESCAPE '\\'`);
@@ -55,6 +62,8 @@ function buildSearchQuery(filters) {
     SELECT
       t.terminal,
       t.datos_excel,
+      t.ubicacion_interna,
+      t.referencia_interna,
       t.activa,
       t.version,
       t.fecha_creacion,
@@ -79,6 +88,8 @@ function mapTerminal(row) {
     fecha_creacion: row.fecha_creacion,
     fecha_actualizacion: row.fecha_actualizacion,
     fecha_ultima_sincronizacion: row.fecha_ultima_sincronizacion,
+    ubicacion_interna: row.ubicacion_interna,
+    referencia_interna: row.referencia_interna,
     datos_excel: row.datos_excel
   };
 }
@@ -95,6 +106,8 @@ async function findTerminal(pool, terminal) {
       SELECT
         t.terminal,
         t.datos_excel,
+        t.ubicacion_interna,
+        t.referencia_interna,
         t.activa,
         t.version,
         t.fecha_creacion,
