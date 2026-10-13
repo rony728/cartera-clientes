@@ -74,6 +74,32 @@ describe('interfaz de Comercios',()=>{
   expect(screen.getByRole('button',{name:'Filtros (1)'})).toBeInTheDocument();
  });
 
+ it('limpia el texto desde el buscador sin cambiar campo, filtros u orden ni abrir el escáner',async()=>{
+  const user=userEvent.setup();
+  renderCommerce('/comercios?campo=SeriePOS&q=SER-0007&pagina=2&Ciudad=Danl%C3%AD&orden=Terminal&direccion=desc');
+  const input=await screen.findByRole('textbox',{name:'Buscar comercios'});
+  const searchContainer=input.closest<HTMLElement>('.search-input')!;
+  const clear=within(searchContainer).getByRole('button',{name:'Limpiar búsqueda'});
+  const scanner=within(searchContainer).getByRole('button',{name:'Escanear código'});
+  expect(Array.from(searchContainer.querySelectorAll('button'))).toEqual([clear,scanner]);
+  await user.click(clear);
+  expect(input).toHaveValue('');
+  expect(within(searchContainer).queryByRole('button',{name:'Limpiar búsqueda'})).not.toBeInTheDocument();
+  expect(within(searchContainer).getByRole('button',{name:'Escanear código'})).toBeInTheDocument();
+  expect(screen.getByRole('combobox',{name:'Buscar en'})).toHaveValue('SeriePOS');
+  expect(screen.getByRole('button',{name:'Filtros (1)'})).toBeInTheDocument();
+  expect(document.querySelector('.modal')).toBeNull();
+  await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({
+   q:'',campo:'SeriePOS',pagina:1,orden:'Terminal',direccion:'desc',filtros:expect.objectContaining({Ciudad:'Danlí'})
+  }),expect.any(AbortSignal)));
+ });
+
+ it('no muestra el control de limpieza cuando el buscador está vacío',async()=>{
+  renderCommerce();
+  await screen.findByRole('textbox',{name:'Buscar comercios'});
+  expect(screen.queryByRole('button',{name:'Limpiar búsqueda'})).not.toBeInTheDocument();
+ });
+
  it('abre y cierra Herramientas y Filtros con controles accesibles',async()=>{
   const user=userEvent.setup();
   renderCommerce('/comercios?Ciudad=Danl%C3%AD&pagina=2');
@@ -227,8 +253,8 @@ describe('interfaz de Comercios',()=>{
   mocks.searchTerminals.mockResolvedValue({datos:[],paginacion:{pagina:1,limite:20,total:0,total_paginas:0}});
   const user=userEvent.setup();
   renderCommerce('/comercios?q=inexistente&Ciudad=Danl%C3%AD');
-  const clear=await screen.findByRole('button',{name:'Limpiar búsqueda'});
-  expect(screen.getByRole('button',{name:'Quitar filtros'})).toBeInTheDocument();
+  expect(await screen.findByRole('button',{name:'Quitar filtros'})).toBeInTheDocument();
+  const clear=screen.getAllByRole('button',{name:'Limpiar búsqueda'})[0];
   await user.click(clear);
   await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({q:'',filtros:expect.objectContaining({Ciudad:'Danlí'})}),expect.any(AbortSignal)));
  });

@@ -8,6 +8,8 @@ La autenticación usa cookie `HttpOnly`, `Secure`, `SameSite=Lax`, `credentials:
 
 La URL de Comercios es la fuente de verdad para búsqueda, campo, filtros, estado, orden, dirección y página. Al abrir una ficha, el frontend asocia el desplazamiento vertical a una clave canónica de esos parámetros. Esa referencia viaja por ficha y edición y también queda en la entrada actual del historial para soportar Atrás/Adelante. La lista restaura después de tener resultados y únicamente ante coincidencia exacta; un contexto diferente elimina el marcador. No se persiste esta información en servidor ni IndexedDB.
 
+El buscador ofrece limpieza directa dentro del control, antes del escáner, sin alterar el campo seleccionado, los filtros ni el orden. En la ficha, las filas de valores reservan una celda fija para copiar y permiten ajuste de línea en correos, nombres, identificadores y referencias extensas sin invadir campos vecinos.
+
 ## Datos online y offline
 
 Online, cada búsqueda consulta PostgreSQL con páginas de 20, debounce de 300 ms, filtros y orden servidor; TanStack Query cancela respuestas obsoletas. La preparación offline descarga páginas de 100 y reemplaza IndexedDB solo tras completarse, conservando la copia anterior ante fallos.

@@ -47,7 +47,7 @@ export default function Detail(){
 
 function DetailField({field,value,copied,onCopy}:{field:string;value:unknown;copied:boolean;onCopy:()=>void}){
  const empty=value===undefined||value===null||String(value).trim()==='';
- return <div className={`field${empty?' empty-field':''}`} data-field={field}><span>{labelFor(field)}</span><div><strong>{empty?'—':String(value)}</strong><button type="button" className="icon-button" aria-label={`Copiar ${labelFor(field)}`} disabled={empty} onClick={onCopy}><Icon name="copy"/></button></div>{field==='Celular'&&validPhone(value)&&<div className="quick-links"><a href={`tel:${digits(value)}`}>Llamar</a><a href={`https://wa.me/${digits(value)}`} target="_blank" rel="noreferrer">WhatsApp</a></div>}{copied&&<small className="copied" aria-hidden="true">Copiado</small>}</div>;
+ return <div className={`field${empty?' empty-field':''}`} data-field={field}><span>{labelFor(field)}</span><div className="field-value-row"><strong>{empty?'—':String(value)}</strong><button type="button" className="icon-button field-copy-button" aria-label={`Copiar ${labelFor(field)}`} disabled={empty} onClick={onCopy}><Icon name="copy"/></button></div>{field==='Celular'&&validPhone(value)&&<div className="quick-links"><a href={`tel:${digits(value)}`}>Llamar</a><a href={`https://wa.me/${digits(value)}`} target="_blank" rel="noreferrer">WhatsApp</a></div>}{copied&&<small className="copied" aria-hidden="true">Copiado</small>}</div>;
 }
 
 const labelFor=(field:string)=>field==='HeaderTerminal'||field==='Terminal'?'Terminal':metaFor(field).label;
