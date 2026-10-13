@@ -289,7 +289,7 @@ test('preflight CORS permite solo métodos y encabezados necesarios', async () =
   assert.equal(response.status, 204);
   assert.equal(response.headers['access-control-allow-origin'], 'https://cartera.rtdev.uk');
   assert.equal(response.headers['access-control-allow-credentials'], 'true');
-  assert.match(response.headers['access-control-allow-methods'], /GET,POST,PATCH,OPTIONS/);
+  assert.match(response.headers['access-control-allow-methods'], /GET,POST,PUT,PATCH,OPTIONS/);
   assert.equal(response.headers['access-control-allow-headers'], 'Content-Type,X-CSRF-Token,X-API-Key');
   assert.equal(response.headers['access-control-max-age'], '600');
 });

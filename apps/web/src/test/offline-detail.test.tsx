@@ -6,6 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Detail from '../pages/Detail';
 import { clearUserData, replaceOfflineTerminals } from '../offline';
 
+const longName = 'Ferretería El Águila y Servicios Comerciales del Centro de Tegucigalpa';
+const longEmail = 'responsable.operativo.con.nombre.muy.extenso@subdominio.ejemplo.hn';
+const longPos = 'POS-SERIE-SIN-TRUNCAR-0000000000000000000000001234';
+const longSim = 'SIM-SERIE-SIN-TRUNCAR-0000000000000000000000005678';
+const longReference = 'Entrada lateral frente a farmacia, después del estacionamiento y junto a la segunda caja principal.';
+
 vi.mock('../Auth', () => ({
   useAuth: () => ({
     user: { id: 'offline-user', nombre: 'Prueba', usuario: 'prueba', rol: 'ADMIN', autenticado: true },
@@ -19,15 +25,17 @@ beforeEach(async () => {
     terminal: '00001234',
     activa: true,
     version: '5',
+    ubicacion_interna: 'Pista',
+    referencia_interna: longReference,
     datos_excel: {
-      NombreComercial: 'Ferretería El Águila',
+      NombreComercial: longName,
       CodigoComercio: '00077',
-      SeriePOS: 'SERIE-ABC-09',
+      SeriePOS: longPos,
       Atendio: 'Ana López',
       Celular: '09990000',
-      Correo: 'ana@example.com',
+      Correo: longEmail,
       RedSimcard: 'Tigo',
-      SerieSimcard: '0000004567',
+      SerieSimcard: longSim,
       Inventario: 'INV-001',
       IP: '10.0.0.7',
       TecnicoAsignado: 'Técnico Uno',
@@ -52,13 +60,32 @@ describe('ficha offline', () => {
       </QueryClientProvider>
     );
 
-    expect(await screen.findByRole('heading', { name: 'Ferretería El Águila' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: longName })).toBeInTheDocument();
+    expect(screen.getByText('Pista')).toBeInTheDocument();
+    const commerceLocation = screen.getByText('Comercio y ubicación').closest('details')!;
+    expect(within(commerceLocation).getByText('Referencia interna')).toBeInTheDocument();
+    expect(within(commerceLocation).getByText(longReference)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '← Volver' })).toHaveAttribute('href', '/comercios?campo=SeriePOS&q=ABC&pagina=2');
     expect(screen.getByText('00077')).toBeInTheDocument();
-    expect(screen.getByText('SERIE-ABC-09')).toBeInTheDocument();
+    expect(screen.getByText(longPos)).toBeInTheDocument();
     expect(screen.getByText('INV-001')).toBeInTheDocument();
     expect(screen.getByText('Detalle disponible sin conexión')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Copiar Terminal' })).toHaveLength(2);
+    for (const [field,value,label] of [
+      ['NombreComercial',longName,'Nombre comercial'],
+      ['Correo',longEmail,'Correo'],
+      ['SeriePOS',longPos,'Serie POS'],
+      ['SerieSimcard',longSim,'Serie SIM / Chip'],
+      ['referencia_interna',longReference,'Referencia interna']
+    ] as const) {
+      const container=document.querySelector<HTMLElement>(`[data-field="${field}"]`)!;
+      const row=container.querySelector('.field-value-row');
+      const copy=within(container).getByRole('button',{name:`Copiar ${label}`});
+      expect(container.querySelector('strong')).toHaveTextContent(value);
+      expect(row).toContainElement(copy);
+    }
+    await user.click(screen.getByRole('button',{name:'Copiar Correo'}));
+    expect(writeText).toHaveBeenCalledWith(longEmail);
     await user.click(screen.getAllByRole('button', { name: 'Copiar Terminal' })[0]);
     expect(writeText).toHaveBeenCalledWith('00001234');
     expect(screen.getByRole('status')).toHaveTextContent('Terminal: Copiado');

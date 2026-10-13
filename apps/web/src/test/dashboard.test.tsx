@@ -1,5 +1,5 @@
 import { QueryClient,QueryClientProvider } from '@tanstack/react-query';
-import { render,screen } from '@testing-library/react';
+import { render,screen,within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter,Route,Routes,useLocation } from 'react-router-dom';
 import { beforeEach,describe,expect,it,vi } from 'vitest';
@@ -30,6 +30,10 @@ describe('Dashboard accesible',()=>{
   expect(table).toHaveTextContent('GPRS');
   expect(table).toHaveTextContent('5');
   expect(table).toHaveTextContent('WIFI');
+  expect(within(table).queryByRole('columnheader')).not.toBeInTheDocument();
+  expect(within(table).queryByText('Categoría')).not.toBeInTheDocument();
+  expect(within(table).queryByText('Cantidad')).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading',{name:'Sincronización con Excel'})).not.toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'Importar snapshot ahora'})).not.toBeInTheDocument();
   await user.click(screen.getByRole('button',{name:'Filtrar Comunicación por GPRS'}));
   expect(screen.getByTestId('location')).toHaveTextContent('/comercios?Comunicacion=GPRS');

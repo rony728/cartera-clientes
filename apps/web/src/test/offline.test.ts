@@ -30,6 +30,8 @@ const rows: Terminal[] = [
     terminal: '00001234',
     activa: true,
     version: '1',
+    ubicacion_interna: 'Pista',
+    referencia_interna: 'Entrada frente a farmacia',
     datos_excel: {
       NombreComercial: 'Ferretería El Águila',
       CodigoComercio: '00077',
@@ -148,6 +150,24 @@ describe('consulta offline', () => {
     expect(propertyName.paginacion.total).toBe(0);
   });
 
+  it.each([
+    ['todos', 'pista'],
+    ['ubicacion_interna', 'pista'],
+    ['todos', 'frente a farmacia'],
+    ['referencia_interna', 'frente a farmacia']
+  ])('encuentra datos internos con búsqueda %s', async (campo, q) => {
+    await replaceOfflineTerminals('u1', rows);
+    const result = await searchOffline('u1', { ...baseState, campo, q });
+    expect(result.datos.map((row) => row.terminal)).toEqual(['00001234']);
+  });
+
+  it('mantiene compatibles los registros cacheados antes de existir los campos internos', async () => {
+    await replaceOfflineTerminals('u1', [{...rows[1]}]);
+    const stored = await offlineTerminal('u1', '00005678');
+    expect(stored?.ubicacion_interna).toBeUndefined();
+    expect((await searchOffline('u1', {...baseState,q:'central'})).paginacion.total).toBe(1);
+  });
+
   it('resuelve diferencias de espacios, mayúsculas y tildes en nombres de campo', async () => {
     await replaceOfflineTerminals('u1', [{
       terminal: '00009999',
@@ -232,6 +252,8 @@ describe('consulta offline', () => {
     expect(typeof terminal?.terminal).toBe('string');
     expect(terminal?.datos_excel.CodigoComercio).toBe('00077');
     expect(terminal?.datos_excel.CampoDinamico).toBe('Referencia especial');
+    expect(terminal?.ubicacion_interna).toBe('Pista');
+    expect(terminal?.referencia_interna).toBe('Entrada frente a farmacia');
   });
 
   it('aísla registros por usuario y los elimina al cerrar sesión', async () => {

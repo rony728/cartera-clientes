@@ -1,7 +1,9 @@
 const { isDeepStrictEqual } = require('node:util');
 
 const STATUS_FIELD = '__estado_terminal__';
-const TECHNICAL_FIELDS = new Set(['ItemInternalId', '@odata.etag']);
+const TECHNICAL_FIELDS = new Set([
+  'ItemInternalId', '@odata.etag', 'ubicacion_interna', 'referencia_interna'
+]);
 
 function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);

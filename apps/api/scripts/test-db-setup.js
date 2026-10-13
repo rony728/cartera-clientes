@@ -4,7 +4,7 @@ require('dotenv').config();
 
 const { createVerifiedTestPool, verifySchema } = require('../test/integration/test-database');
 
-const MIGRATIONS = ['001_initial_schema.sql', '002_auth_sessions.sql'];
+const MIGRATIONS = ['001_initial_schema.sql', '002_auth_sessions.sql', '003_internal_terminal_fields.sql', '004_terminal_photos.sql'];
 
 async function main() {
   const { pool, identity } = await createVerifiedTestPool();

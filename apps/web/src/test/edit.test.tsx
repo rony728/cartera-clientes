@@ -15,6 +15,7 @@ vi.mock('../api',()=>({
 
 const terminal:Terminal={
   terminal:'00000284',activa:true,version:'7',
+  ubicacion_interna:'Pista',referencia_interna:'Entrada lateral',
   datos_excel:{IP:'10.0.0.1',DNS:'8.8.8.8',Zona:'Centro',CodigoComercio:'00077',NombreComercial:'Comercio original',SeriePOS:'000SERIE',Atendio:'Ana',Celular:'09999999',Correo:'ana@example.com',RedSimcard:'Tigo',SerieSimcard:'000123',Inventario:'0000456',TecnicoAsignado:'Luis',CampoDinamico:'visible'}
 };
 
@@ -67,6 +68,25 @@ describe('edición y propagación V2',()=>{
   const [,options]=mocks.api.mock.calls[1] as [string,RequestInit];
   expect(JSON.parse(String(options.body))).toEqual({version:'7',cambios:{NombreComercial:'Nuevo nombre',Celular:''}});
   expect(await screen.findByText('Guardado en PostgreSQL y enviado para conciliación con Excel.')).toBeInTheDocument();
+ });
+
+ it('edita campos internos con referencia multilínea sin mezclarlos con Excel',async()=>{
+  mocks.api.mockImplementation(async(_path:string,options?:RequestInit)=>{
+   if(!options?.method)return terminal;
+   return {terminal:{...terminal,version:'8',ubicacion_interna:'Caja 2',referencia_interna:'Segundo nivel'},propagacion:[],envio_excel:{estado:'NO_APLICA',campos:[]}};
+  });
+  const user=userEvent.setup();renderEdit();
+  const location=await screen.findByRole('textbox',{name:'Ubicación interna'});
+  const reference=screen.getByRole('textbox',{name:'Referencia interna'});
+  expect(reference.tagName).toBe('TEXTAREA');
+  expect(screen.getByText('Estos datos se guardan solo en la aplicación y no se envían a Excel.')).toBeInTheDocument();
+  await user.clear(location);await user.type(location,'Caja 2');
+  await user.clear(reference);await user.type(reference,'Segundo nivel');
+  await user.click(screen.getByRole('button',{name:'Guardar cambios'}));
+  await waitFor(()=>expect(mocks.api).toHaveBeenCalledTimes(2));
+  const [,options]=mocks.api.mock.calls[1] as [string,RequestInit];
+  expect(JSON.parse(String(options.body))).toEqual({version:'7',cambios:{ubicacion_interna:'Caja 2',referencia_interna:'Segundo nivel'}});
+  expect(await screen.findByText('Cambios internos guardados en PostgreSQL.')).toBeInTheDocument();
  });
 
  it('conserva el contexto y el scroll al cancelar la edición',async()=>{

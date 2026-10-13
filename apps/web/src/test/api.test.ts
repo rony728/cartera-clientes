@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, importSnapshot, searchParams, setCsrfToken } from '../api';
+import { api, getCommercePhoto, importSnapshot, saveCommercePhoto, searchParams, setCsrfToken } from '../api';
 
 afterEach(() => vi.restoreAllMocks());
 describe('cliente API seguro', () => {
@@ -40,5 +40,21 @@ describe('cliente API seguro', () => {
     const listener=vi.fn();window.addEventListener('session-expired',listener,{once:true});
     vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({mensaje:'No autorizado'}),{status:401,headers:{'Content-Type':'application/json'}}));
     await expect(api('/api/v1/auth/me')).rejects.toMatchObject({status:401});expect(listener).toHaveBeenCalledOnce();
+  });
+  it('consulta y guarda fotografías como binario autenticado con CSRF', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(new Blob(['webp'], { type: 'image/webp' }), { status: 200, headers: { 'Last-Modified': 'Mon, 12 Oct 2026 00:00:00 GMT' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 201, headers: { 'Content-Type': 'application/json' } }));
+    setCsrfToken('token-foto');
+    const result = await getCommercePhoto('000 123');
+    expect(result?.blob).toBeInstanceOf(Blob);
+    const file = new File(['jpeg'], 'controlada.jpg', { type: 'image/jpeg' });
+    await saveCommercePhoto('000 123', file, false);
+    expect(fetchMock.mock.calls[0][0]).toContain('/000%20123/fotografia');
+    const upload = fetchMock.mock.calls[1][1]!;
+    expect(upload.method).toBe('POST');
+    expect(upload.body).toBe(file);
+    expect(new Headers(upload.headers).get('Content-Type')).toBe('image/jpeg');
+    expect(new Headers(upload.headers).get('X-CSRF-Token')).toBe('token-foto');
   });
 });

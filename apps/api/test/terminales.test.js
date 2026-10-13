@@ -17,6 +17,8 @@ const terminalRow = {
     Inventario: 'POS-01',
     SeriePOS: 'SERIE-01'
   },
+  ubicacion_interna: 'Pista',
+  referencia_interna: 'Entrada frente a farmacia',
   activa: true,
   version: '1',
   fecha_creacion: '2026-01-01T00:00:00.000Z',
@@ -129,6 +131,20 @@ test('busca por cada propiedad JSONB permitida', async () => {
   }
 });
 
+test('devuelve y busca los campos internos sin tratarlos como JSON de Excel', async () => {
+  const { app } = appWithPool();
+  const response = await request(app, {
+    path: '/api/v1/terminales?q=Pista&campo=ubicacion_interna',
+    headers: { 'X-API-Key': 'test-api-key' }
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.datos[0].ubicacion_interna, 'Pista');
+  assert.equal(response.body.datos[0].referencia_interna, 'Entrada frente a farmacia');
+  const query = buildSearchQuery(parseSearchParams({ q: 'farmacia', campo: 'referencia_interna' }));
+  assert.match(query.text, /t\.referencia_interna ILIKE/u);
+  assert.doesNotMatch(query.text, /\(t\.datos_excel ->> \$2\) ILIKE/u);
+});
+
 test('permite buscar una columna dinámica segura y rechaza campos internos', () => {
   const query = buildSearchQuery(parseSearchParams({ q: 'valor', campo: 'Nueva Columna 2026' }));
   assert.equal(query.values[1], 'Nueva Columna 2026');
@@ -141,6 +157,8 @@ test('búsqueda general usa los valores de todos los campos dinámicos sin busca
   assert.match(query.text, /property\.value ILIKE/u);
   assert.doesNotMatch(query.text, /datos_excel::text ILIKE/u);
   assert.match(query.text, /t\.terminal ILIKE/u);
+  assert.match(query.text, /t\.ubicacion_interna ILIKE/u);
+  assert.match(query.text, /t\.referencia_interna ILIKE/u);
 });
 
 test('combina filtros y orden antes de paginar usando parámetros SQL', () => {
@@ -220,6 +238,23 @@ test('validación V2 rechaza Terminal, internos, columnas desconocidas y valores
     {Ciudad:{nombre:'x'}},{Ciudad:['x']},{Ciudad:1},{Ciudad:true}
   ]) assert.throws(()=>validateChanges({version:1,cambios}),ValidationError);
   assert.deepEqual(validateChanges({version:1,cambios:{Celular:'',Correo:null}}).changes,{Celular:'',Correo:null});
+  assert.deepEqual(validateChanges({version:1,cambios:{Celular:'1',ubicacion_interna:'Pista',referencia_interna:null}}),{
+    version:1,changes:{Celular:'1'},internalChanges:{ubicacion_interna:'Pista',referencia_interna:null}
+  });
+});
+
+test('una edición solo interna no genera correo ni operación para Excel', async () => {
+  let sent=0;let received;
+  const terminalRepository={
+    async updateTerminal(_pool,input){received=input;return{kind:'updated',terminal:{...terminalRow,version:'2',ubicacion_interna:'Caja 2'},queue:[]};},
+    async getFilterOptions(){return{};},async getDashboard(){return{};},async getHistory(){return{datos:[],total:0};}
+  };
+  const app=createApp({apiKey:'key',databasePool:fakePool(),checkDatabaseFn:async()=>{},sendMailFn:async()=>{sent+=1;},terminalRepository,...baseAppOptions()});
+  const response=await request(app,{method:'PATCH',path:'/api/v1/terminales/000123',headers:{'Content-Type':'application/json','X-CSRF-Token':'test-csrf-token'},body:{version:1,cambios:{ubicacion_interna:'Caja 2',referencia_interna:'Junto a caja'}}});
+  assert.equal(response.status,200);assert.equal(sent,0);
+  assert.deepEqual(received.changes,{});
+  assert.deepEqual(received.internalChanges,{ubicacion_interna:'Caja 2',referencia_interna:'Junto a caja'});
+  assert.deepEqual(response.body.envio_excel,{estado:'NO_APLICA',campos:[]});
 });
 
 test('un error de Microsoft Graph conserva el guardado local y marca todos los campos como ERROR', async () => {

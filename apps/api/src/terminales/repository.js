@@ -81,12 +81,15 @@ async function getHistory(pool, terminal, { pagina, limite }) {
   };
 }
 
-async function updateTerminal(pool, { terminal, version, changes, userId }) {
+async function updateTerminal(pool, {
+  terminal, version, changes, internalChanges = {}, userId
+}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const currentResult = await client.query({
-      text: `SELECT terminal, datos_excel, activa, version FROM public.terminales
+      text: `SELECT terminal, datos_excel, ubicacion_interna, referencia_interna, activa, version
+        FROM public.terminales
         WHERE terminal = $1 FOR UPDATE`,
       values: [terminal]
     });
@@ -108,11 +111,14 @@ async function updateTerminal(pool, { terminal, version, changes, userId }) {
       !Object.prototype.hasOwnProperty.call(current.datos_excel, field)
       || JSON.stringify(current.datos_excel[field]) !== JSON.stringify(value)
     ));
-    if (effective.length === 0) {
+    const effectiveInternal = Object.entries(internalChanges).filter(([field, value]) => (
+      current[field] !== value
+    ));
+    if (effective.length === 0 && effectiveInternal.length === 0) {
       await client.query('COMMIT');
       return { kind: 'unchanged', terminal: current };
     }
-    const operationId = crypto.randomUUID();
+    const operationId = effective.length > 0 ? crypto.randomUUID() : null;
     const nextData = { ...current.datos_excel };
     const queue = [];
     for (const [field, value] of effective) {
@@ -145,12 +151,31 @@ async function updateTerminal(pool, { terminal, version, changes, userId }) {
         values: [terminal, field, JSON.stringify(oldValue), oldPresent, JSON.stringify(value), userId, queueRow.id]
       });
     }
+
+    const nextInternal = {
+      ubicacion_interna: current.ubicacion_interna,
+      referencia_interna: current.referencia_interna
+    };
+    for (const [field, value] of effectiveInternal) {
+      const oldValue = current[field];
+      nextInternal[field] = value;
+      await client.query({
+        text: `INSERT INTO public.historial_cambios
+          (terminal, campo, valor_anterior, valor_anterior_presente, valor_nuevo,
+           valor_nuevo_presente, origen, usuario_id)
+          VALUES ($1, $2, $3::jsonb, true, $4::jsonb, true, 'PWA', $5)`,
+        values: [terminal, field, JSON.stringify(oldValue), JSON.stringify(value), userId]
+      });
+    }
     const updated = await client.query({
-      text: `UPDATE public.terminales SET datos_excel = $2::jsonb, version = version + 1,
+      text: `UPDATE public.terminales SET datos_excel = $2::jsonb,
+        ubicacion_interna = $3, referencia_interna = $4, version = version + 1,
         fecha_actualizacion = now() WHERE terminal = $1
         RETURNING terminal, datos_excel, activa, version, fecha_creacion,
-          fecha_actualizacion, fecha_ultima_sincronizacion`,
-      values: [terminal, JSON.stringify(nextData)]
+          fecha_actualizacion, fecha_ultima_sincronizacion,
+          ubicacion_interna, referencia_interna`,
+      values: [terminal, JSON.stringify(nextData),
+        nextInternal.ubicacion_interna, nextInternal.referencia_interna]
     });
     await client.query('COMMIT');
     return { kind: 'updated', terminal: updated.rows[0], queue };

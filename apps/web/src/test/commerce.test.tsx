@@ -29,7 +29,7 @@ vi.mock('../offline',async(importOriginal)=>{
 });
 vi.mock('../export',()=>({exportTerminals:mocks.exportTerminals}));
 
-const terminal:Terminal={terminal:'00001234',activa:true,version:'1',datos_excel:{NombreComercial:'Café Central',SeriePOS:'SER-0007',Inventario:'INV-0042',Ciudad:'Danlí',CodigoComercio:'00077',Correo:'ana@example.com',Celular:'09990000',Atendio:'Ana López',SerieSimcard:'0000004567',RedSimcard:'Tigo'}};
+const terminal:Terminal={terminal:'00001234',activa:true,version:'1',ubicacion_interna:'Pista',referencia_interna:'Frente a farmacia',datos_excel:{NombreComercial:'Café Central',SeriePOS:'SER-0007',Inventario:'INV-0042',Ciudad:'Danlí',CodigoComercio:'00077',Correo:'ana@example.com',Celular:'09990000',Atendio:'Ana López',SerieSimcard:'0000004567',RedSimcard:'Tigo'}};
 const page={datos:[terminal],paginacion:{pagina:1,limite:20,total:1,total_paginas:2}};
 
 function renderCommerce(entry:InitialEntry='/comercios'){
@@ -72,6 +72,32 @@ describe('interfaz de Comercios',()=>{
   expect(await screen.findByRole('combobox',{name:'Buscar en'})).toHaveValue('SeriePOS');
   await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({campo:'SeriePOS',q:'SER-0007',pagina:2,filtros:expect.objectContaining({Ciudad:'Danlí'})}),expect.any(AbortSignal)));
   expect(screen.getByRole('button',{name:'Filtros (1)'})).toBeInTheDocument();
+ });
+
+ it('limpia el texto desde el buscador sin cambiar campo, filtros u orden ni abrir el escáner',async()=>{
+  const user=userEvent.setup();
+  renderCommerce('/comercios?campo=SeriePOS&q=SER-0007&pagina=2&Ciudad=Danl%C3%AD&orden=Terminal&direccion=desc');
+  const input=await screen.findByRole('textbox',{name:'Buscar comercios'});
+  const searchContainer=input.closest<HTMLElement>('.search-input')!;
+  const clear=within(searchContainer).getByRole('button',{name:'Limpiar búsqueda'});
+  const scanner=within(searchContainer).getByRole('button',{name:'Escanear código'});
+  expect(Array.from(searchContainer.querySelectorAll('button'))).toEqual([clear,scanner]);
+  await user.click(clear);
+  expect(input).toHaveValue('');
+  expect(within(searchContainer).queryByRole('button',{name:'Limpiar búsqueda'})).not.toBeInTheDocument();
+  expect(within(searchContainer).getByRole('button',{name:'Escanear código'})).toBeInTheDocument();
+  expect(screen.getByRole('combobox',{name:'Buscar en'})).toHaveValue('SeriePOS');
+  expect(screen.getByRole('button',{name:'Filtros (1)'})).toBeInTheDocument();
+  expect(document.querySelector('.modal')).toBeNull();
+  await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({
+   q:'',campo:'SeriePOS',pagina:1,orden:'Terminal',direccion:'desc',filtros:expect.objectContaining({Ciudad:'Danlí'})
+  }),expect.any(AbortSignal)));
+ });
+
+ it('no muestra el control de limpieza cuando el buscador está vacío',async()=>{
+  renderCommerce();
+  await screen.findByRole('textbox',{name:'Buscar comercios'});
+  expect(screen.queryByRole('button',{name:'Limpiar búsqueda'})).not.toBeInTheDocument();
  });
 
  it('abre y cierra Herramientas y Filtros con controles accesibles',async()=>{
@@ -121,6 +147,17 @@ describe('interfaz de Comercios',()=>{
   await user.click(within(card).getByRole('button',{name:'Copiar Código'}));
   expect(writeText).toHaveBeenLastCalledWith('00077');
   expect(screen.getByRole('heading',{name:'Café Central'})).toBeInTheDocument();
+  expect(within(card).getByText('Pista')).toHaveClass('internal-location');
+  const tableName=document.querySelector('.commerce-name-cell');
+  expect(tableName).toHaveTextContent('Café Central');
+  expect(tableName).toHaveTextContent('Pista');
+ });
+
+ it('no reserva la línea de ubicación interna cuando está vacía',async()=>{
+  mocks.searchTerminals.mockResolvedValue({...page,datos:[{...terminal,ubicacion_interna:null}]});
+  renderCommerce();
+  const card=(await screen.findByRole('link',{name:'Café Central'})).closest('article')!;
+  expect(card.querySelector('.internal-location')).toBeNull();
  });
 
  it('oculta una acción de copia cuando el valor está vacío',async()=>{
@@ -216,8 +253,8 @@ describe('interfaz de Comercios',()=>{
   mocks.searchTerminals.mockResolvedValue({datos:[],paginacion:{pagina:1,limite:20,total:0,total_paginas:0}});
   const user=userEvent.setup();
   renderCommerce('/comercios?q=inexistente&Ciudad=Danl%C3%AD');
-  const clear=await screen.findByRole('button',{name:'Limpiar búsqueda'});
-  expect(screen.getByRole('button',{name:'Quitar filtros'})).toBeInTheDocument();
+  expect(await screen.findByRole('button',{name:'Quitar filtros'})).toBeInTheDocument();
+  const clear=screen.getAllByRole('button',{name:'Limpiar búsqueda'})[0];
   await user.click(clear);
   await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({q:'',filtros:expect.objectContaining({Ciudad:'Danlí'})}),expect.any(AbortSignal)));
  });

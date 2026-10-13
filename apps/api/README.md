@@ -4,7 +4,7 @@ API Express para consultar terminales en PostgreSQL y enviar actualizaciones a P
 
 ## Configuración
 
-Requisitos: Node.js 20 o superior y, en Android, Termux con `node` y `npm` instalados.
+Requisitos: Node.js 20.9 o superior y, en Android, Termux con `node` y `npm` instalados.
 
 ```sh
 npm install
@@ -320,3 +320,17 @@ POST  /api/v1/auth/password
 La edición exige `version`, `cambios` y CSRF; persiste e historiza los campos admitidos. Los 23 campos configurados se agrupan en una operación y se transmiten en un único correo `ACTUALIZAR_CARTERA_V2`. La respuesta distingue el guardado local del estado externo; `ENVIADO` solo significa que Microsoft Graph aceptó el correo. Consulta [../../docs/power-automate-v2.md](../../docs/power-automate-v2.md) para el contrato, la cola, la conciliación y las limitaciones de concurrencia.
 
 `filtros/opciones` devuelve los valores distintos de filtros y los nombres de campos dinámicos visibles para el rol actual. No revela metadatos de terminales inactivas a `USUARIO`.
+
+## Fotografías internas
+
+La migración `004_terminal_photos.sql` crea `fotografias_comercios`, una tabla separada de `terminales.datos_excel`. Se eligió `BYTEA` porque la escala prevista es de aproximadamente 1,000 terminales con una fotografía cada una: permite reemplazo transaccional, backup junto con PostgreSQL y evita rutas locales, volúmenes temporales o path traversal. Las fotografías no forman parte del snapshot, correo V2, Power Automate ni conflictos de Excel.
+
+Endpoints autenticados:
+
+```text
+GET  /api/v1/terminales/:terminal/fotografia
+POST /api/v1/terminales/:terminal/fotografia
+PUT  /api/v1/terminales/:terminal/fotografia
+```
+
+`POST` crea y responde `409` si ya existe; `PUT` crea o reemplaza. Las escrituras exigen CSRF. Solo se aceptan JPEG, PNG y WebP con hasta 8 MiB de entrada. `sharp` valida el contenido real, corrige orientación, limita a 1600 × 1600, convierte a WebP y garantiza un máximo persistido de 2 MiB. La migración se prepara en el repositorio, pero debe revisarse y aplicarse explícitamente en el servidor antes de desplegar la API.

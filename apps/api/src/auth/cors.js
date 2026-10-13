@@ -31,7 +31,7 @@ function createCorsMiddleware(allowedOrigins) {
   const allowed = new Set(allowedOrigins.map((origin) => validateOrigin(origin)));
   return cors({
     credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-API-Key'],
     maxAge: 600,
     optionsSuccessStatus: 204,

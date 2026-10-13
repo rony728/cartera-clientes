@@ -180,11 +180,11 @@ test('distingue propiedades ausentes frente a null', () => {
 });
 
 test('ignora valores técnicos para evitar falsos cambios', () => {
-  const first = parseSnapshot(jsonBuffer([record('1', { ItemInternalId: 'A', '@odata.etag': '1' })]));
-  const second = parseSnapshot(jsonBuffer([record('1', { ItemInternalId: 'B', '@odata.etag': '2' })]));
+  const first = parseSnapshot(jsonBuffer([record('1', { ItemInternalId: 'A', '@odata.etag': '1', ubicacion_interna:'Pista', referencia_interna:'A' })]));
+  const second = parseSnapshot(jsonBuffer([record('1', { ItemInternalId: 'B', '@odata.etag': '2', ubicacion_interna:'Caja', referencia_interna:'B' })]));
   assert.deepEqual(first.records[0], second.records[0]);
   const plan = buildPlan([
-    normalized('1', { NombreComercial: 'Comercio 1', ItemInternalId: 'viejo', '@odata.etag': 'viejo' })
+    normalized('1', { NombreComercial: 'Comercio 1', ItemInternalId: 'viejo', '@odata.etag': 'viejo', ubicacion_interna:'vieja', referencia_interna:'vieja' })
   ], first.records);
   assert.equal(plan.counters.sin_cambios, 1);
   assert.equal(plan.history.length, 0);

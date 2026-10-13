@@ -49,10 +49,18 @@ function searchableValues(value: unknown): unknown[] {
 function terminalSearchValues(terminal: Terminal) {
   return [
     terminal.terminal,
+    terminal.ubicacion_interna,
+    terminal.referencia_interna,
     ...Object.entries(terminal.datos_excel)
       .filter(([field]) => !INTERNAL_FIELDS.has(field))
       .flatMap(([, value]) => searchableValues(value))
   ];
+}
+
+function terminalFieldValue(terminal: Terminal, field: string) {
+  if (field === 'ubicacion_interna') return terminal.ubicacion_interna;
+  if (field === 'referencia_interna') return terminal.referencia_interna;
+  return excelValue(terminal.datos_excel, field);
 }
 
 export async function saveOfflineAuth(user: User) {
@@ -210,7 +218,7 @@ export async function searchOffline(userId: UserIdentifier, state: SearchState):
         ? terminalSearchValues(terminal)
         : [state.campo === 'terminal'
           ? terminal.terminal
-          : excelValue(terminal.datos_excel, state.campo)];
+          : terminalFieldValue(terminal, state.campo)];
       return values.some((value) => normalizeOfflineText(value).includes(term));
     });
   }
