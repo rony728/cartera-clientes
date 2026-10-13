@@ -9,7 +9,8 @@ const REQUIRED_TABLES = [
   'historial_cambios',
   'conflictos_sincronizacion',
   'user_sessions',
-  'auth_login_attempts'
+  'auth_login_attempts',
+  'fotografias_comercios'
 ];
 
 function loadTestDatabaseConfig(env = process.env) {
@@ -93,6 +94,7 @@ async function cleanTestData(pool, expectedName) {
     await client.query('BEGIN');
     await client.query(`
       TRUNCATE TABLE
+        public.fotografias_comercios,
         public.conflictos_sincronizacion,
         public.historial_cambios,
         public.cola_sincronizacion,

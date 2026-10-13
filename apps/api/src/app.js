@@ -6,6 +6,7 @@ const { csrfProtection } = require('./auth/csrf');
 const { sendMail } = require('./mail');
 const { checkDatabase, pool: defaultPool } = require('./database');
 const { createApiKeyMiddleware } = require('./middleware/api-key');
+const { createPhotosRouter } = require('./photos/routes');
 const { createSynchronizationsRouter } = require('./sincronizaciones/routes');
 const { createTerminalesRouter } = require('./terminales/routes');
 const { createUsersRouter } = require('./usuarios/routes');
@@ -20,6 +21,8 @@ function createApp({
   importService,
   synchronizationRepository,
   terminalRepository,
+  photoRepository,
+  optimizePhotoFn,
   sessionMiddleware,
   corsMiddleware = (_req, _res, next) => next(),
   users = authRepository,
@@ -43,6 +46,13 @@ function createApp({
   app.use(corsMiddleware);
   app.use(sessionMiddleware);
   app.use('/api/cartera/celular', requireApiKey);
+  app.use('/api/v1/terminales', createPhotosRouter({
+    pool: databasePool,
+    requireAuth: access.requireAuth,
+    csrfProtection,
+    ...(photoRepository ? { repositoryApi: photoRepository } : {}),
+    ...(optimizePhotoFn ? { optimizePhotoFn } : {})
+  }));
   app.use(express.json({ limit: '16kb' }));
   app.get('/api/v1/health', requireApiKey, async (req, res) => {
     try {
@@ -116,6 +126,10 @@ function createApp({
     }
     if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
       return res.status(400).json({ ok: false, error: 'El cuerpo debe ser JSON válido.' });
+    }
+    if (error.type === 'entity.too.large'
+        && String(req.originalUrl || '').split('?', 1)[0].endsWith('/fotografia')) {
+      return res.status(413).json({ ok: false, codigo: 'FOTO_DEMASIADO_GRANDE', mensaje: 'La fotografía supera el límite de 8 MiB.' });
     }
     return next(error);
   });

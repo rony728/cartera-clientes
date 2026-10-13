@@ -31,6 +31,44 @@ export async function login(usuario: string, password: string) {
 }
 export const logout = () => api('/api/v1/auth/logout', { method: 'POST' });
 
+export interface CommercePhotoResponse {
+  blob: Blob;
+  lastModified: string | null;
+}
+
+async function photoRequest(path: string, options: RequestInit = {}) {
+  const headers = new Headers(options.headers);
+  if (options.method && !['GET', 'HEAD'].includes(options.method) && csrfToken) {
+    headers.set('X-CSRF-Token', csrfToken);
+  }
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options, headers, credentials: 'include', cache: 'no-store'
+  });
+  if (response.status === 401) window.dispatchEvent(new Event('session-expired'));
+  return response;
+}
+
+export async function getCommercePhoto(terminal: string, signal?: AbortSignal): Promise<CommercePhotoResponse | null> {
+  const response = await photoRequest(`/api/v1/terminales/${encodeURIComponent(terminal)}/fotografia`, { signal });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new ApiError(response.status, data?.mensaje || 'No se pudo cargar la fotografía.', data);
+  }
+  return { blob: await response.blob(), lastModified: response.headers.get('Last-Modified') };
+}
+
+export async function saveCommercePhoto(terminal: string, file: File, replace: boolean) {
+  const response = await photoRequest(`/api/v1/terminales/${encodeURIComponent(terminal)}/fotografia`, {
+    method: replace ? 'PUT' : 'POST', headers: { 'Content-Type': file.type }, body: file
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(response.status, data?.mensaje || 'No se pudo guardar la fotografía.', data);
+  }
+  return data as { ok: true };
+}
+
 export function importSnapshot(confirmMassDeactivation = false) {
   return api('/api/v1/sincronizaciones', {
     method: 'POST',
