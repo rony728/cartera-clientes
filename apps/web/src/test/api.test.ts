@@ -42,12 +42,18 @@ describe('cliente API seguro', () => {
     await expect(api('/api/v1/auth/me')).rejects.toMatchObject({status:401});expect(listener).toHaveBeenCalledOnce();
   });
   it('consulta y guarda fotografías como binario autenticado con CSRF', async () => {
+    const photoBytes = new Uint8Array([0x52, 0x49, 0x46, 0x46]);
     const fetchMock = vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(new Blob(['webp'], { type: 'image/webp' }), { status: 200, headers: { 'Last-Modified': 'Mon, 12 Oct 2026 00:00:00 GMT' } }))
+      .mockResolvedValueOnce(new Response(photoBytes, { status: 200, headers: { 'Content-Type': 'image/webp', 'Last-Modified': 'Mon, 12 Oct 2026 00:00:00 GMT' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 201, headers: { 'Content-Type': 'application/json' } }));
     setCsrfToken('token-foto');
     const result = await getCommercePhoto('000 123');
-    expect(result?.blob).toBeInstanceOf(Blob);
+    expect(result).not.toBeNull();
+    expect(result!.blob.size).toBe(photoBytes.byteLength);
+    expect(result!.blob.type).toBe('image/webp');
+    const binarySlice = result!.blob.slice(0, 2, 'application/octet-stream');
+    expect(binarySlice.size).toBe(2);
+    expect(binarySlice.type).toBe('application/octet-stream');
     const file = new File(['jpeg'], 'controlada.jpg', { type: 'image/jpeg' });
     await saveCommercePhoto('000 123', file, false);
     expect(fetchMock.mock.calls[0][0]).toContain('/000%20123/fotografia');
