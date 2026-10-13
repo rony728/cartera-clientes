@@ -73,7 +73,7 @@ No se deben almacenar contraseñas, API keys, tokens CSRF ni identificadores de 
 
 `SNAPSHOT_IMPORT_ENABLED=false` es el valor predeterminado. Tras validar el snapshot de solo lectura y las pruebas contra la base aislada, puede cambiarse deliberadamente a `true` en el `.env` de Ubuntu. Esta opción solo habilita `POST /api/v1/sincronizaciones`: no lee el archivo al arrancar ni programa sincronizaciones.
 
-El POST exige sesión activa, rol `ADMIN`, token CSRF y `confirmar_importacion: true`. El Dashboard solicita esa confirmación al administrador. Si el snapshot omite más del 10% de las terminales activas, el servidor rechaza el primer intento y exige además `confirmar_inactivacion_masiva: true`. El archivo siempre se toma de `SNAPSHOT_PATH`; la solicitud no puede elegir otra ruta.
+El POST exige sesión activa, rol `ADMIN`, token CSRF y `confirmar_importacion: true`. La pantalla «Sincronización con Excel» dentro de Menú solicita esa confirmación al administrador. Si el snapshot omite más del 10% de las terminales activas, el servidor rechaza el primer intento y exige además `confirmar_inactivacion_masiva: true`. El archivo siempre se toma de `SNAPSHOT_PATH`; la solicitud no puede elegir otra ruta.
 
 ## Validación y despliegue con PM2
 

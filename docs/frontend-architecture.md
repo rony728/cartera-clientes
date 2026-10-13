@@ -38,7 +38,7 @@ La importación ignora defensivamente nombres internos que pudieran aparecer en 
 
 La exportación obtiene todos los resultados coincidentes, respeta filtros/permisos/columnas, preserva identificadores como texto y neutraliza fórmulas. Offline exporta la copia autorizada disponible y lo indica en el nombre.
 
-ZXing se carga bajo demanda, funciona desde recursos instalados y procesa video solo en el dispositivo. Permite seleccionar cámara, maneja permisos denegados y ofrece linterna únicamente cuando `MediaTrackCapabilities` informa soporte; queda pendiente su validación física por dispositivo.
+ZXing se carga bajo demanda, funciona desde recursos instalados, admite QR y códigos de barras y procesa video solo en el dispositivo. La inicialización solicita primero un stream con preferencia por la cámara trasera y reintenta sin esa restricción si el navegador no la admite; la enumeración posterior se usa únicamente para ofrecer cambio de cámara. Los mensajes distinguen contexto inseguro, API ausente, permiso denegado, cámara inexistente y cámara ocupada. Al cerrar, cambiar de cámara o detectar un código se detienen controles y pistas. La linterna aparece únicamente cuando `MediaTrackCapabilities` informa soporte; queda pendiente su validación física por dispositivo.
 
 `CommercePhoto` define estados `empty`, `loading`, `error` y `ready`; hoy la ficha muestra vacío y carga deshabilitada. Contrato futuro: binario y metadatos independientes del JSON Excel, asociados a `Terminal`, con GET/POST autenticados, límites MIME/tamaño, autorización, auditoría y reemplazo atómico. Un snapshot o inactivación nunca debe borrar la foto.
 
@@ -52,7 +52,9 @@ ZXing se carga bajo demanda, funciona desde recursos instalados y procesa video 
 
 Se reutilizan autenticación, usuarios, terminales y sincronizaciones existentes. La única migración de esta etapa es `003_internal_terminal_fields.sql`.
 
-El Dashboard muestra la importación solo a `ADMIN`. Solicita confirmación antes del POST, envía `confirmar_importacion: true` con el token CSRF en memoria y, si el servidor detecta más del 10% de ausencias, exige una segunda confirmación antes de reenviar `confirmar_inactivacion_masiva: true`.
+El acceso «Sincronización con Excel» está dentro de Menú y su ruta también está protegida para `ADMIN`; el Dashboard no duplica esta operación. La pantalla solicita confirmación antes del POST, envía `confirmar_importacion: true` con el token CSRF en memoria y, si el servidor detecta más del 10% de ausencias, exige una segunda confirmación antes de reenviar `confirmar_inactivacion_masiva: true`.
+
+Las distribuciones del Dashboard conservan gráficos interactivos y muestran debajo una lista tabular accesible de valor y cantidad. No repiten la fila genérica «Categoría | Cantidad» porque el título de cada tarjeta ya proporciona el contexto; cada valor mantiene su botón de navegación filtrada.
 
 El endpoint de filtros devuelve `datos` con valores distintos autorizados y `campos` con nombres JSONB descubiertos. Esto permite buscar y seleccionar columnas nuevas sin codificarlas en el frontend; los usuarios normales solo derivan metadatos de terminales activas.
 
