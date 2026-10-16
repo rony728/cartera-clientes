@@ -2,6 +2,10 @@ const { Pool } = require('pg');
 
 const FORBIDDEN_DATABASES = new Set(['cartera_clientes', 'postgres', 'template0', 'template1']);
 const REQUIRED_TABLES = [
+  'visitas_actuales',
+  'visitas_fuentes',
+  'visitas_reportes',
+  'importaciones_visitas',
   'usuarios',
   'terminales',
   'sincronizaciones',
@@ -94,6 +98,10 @@ async function cleanTestData(pool, expectedName) {
     await client.query('BEGIN');
     await client.query(`
       TRUNCATE TABLE
+        public.visitas_actuales,
+        public.visitas_fuentes,
+        public.visitas_reportes,
+        public.importaciones_visitas,
         public.fotografias_comercios,
         public.conflictos_sincronizacion,
         public.historial_cambios,

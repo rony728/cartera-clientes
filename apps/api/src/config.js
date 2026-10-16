@@ -105,6 +105,7 @@ function loadServerConfig(env = process.env) {
     nodeEnv,
     port,
     sessionSecret,
+    visitasEnabled: parseBoolean(env.VISITAS_ENABLED, 'VISITAS_ENABLED', false),
     snapshotConfig: {
       filePath: env.SNAPSHOT_PATH || path.join(os.homedir(), 'cartera-snapshot', 'snapshot.json'),
       recordsPath: env.SNAPSHOT_RECORDS_PATH || '',

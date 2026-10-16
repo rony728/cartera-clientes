@@ -1,0 +1,12 @@
+[Unit]
+Description=Importar reportes locales de visitas (activación pendiente)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=rony
+WorkingDirectory=/home/rony/cartera-clientes/apps/api
+Environment=VISITAS_IMPORT_ENABLED=true
+ExecStart=/RUTA/ABSOLUTA/AL/NODE scripts/import-visitas.js
+UMask=0077
+NoNewPrivileges=true

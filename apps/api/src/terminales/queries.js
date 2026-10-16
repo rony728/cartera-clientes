@@ -1,4 +1,5 @@
-const { FILTER_FIELDS, PWA_INTERNAL_FIELD_SET, SEARCH_FIELDS } = require('./fields');
+const { MONTH_END } = require('../visitas/queries');
+const { FILTER_FIELDS, PWA_INTERNAL_FIELD_SET } = require('./fields');
 
 function escapeLike(value) {
   return value.replace(/[\\%_]/gu, (character) => `\\${character}`);
@@ -10,7 +11,11 @@ function getStateCondition(estado) {
   return 'TRUE';
 }
 
-function buildSearchQuery(filters) {
+function buildSearchQuery(filters, visitasEnabled = false) {
+  if (!visitasEnabled && (filters.visitas || filters.orden === 'ultima_visita')) {
+    const { ValidationError } = require('./validation');
+    throw new ValidationError('Las consultas de visitas están deshabilitadas.');
+  }
   const offset = (filters.pagina - 1) * filters.limite;
   const conditions = [getStateCondition(filters.estado)];
   const values = [];
@@ -50,7 +55,18 @@ function buildSearchQuery(filters) {
     conditions.push(`(t.datos_excel ->> ${key}) = ${filterValue}`);
   }
 
-  const sortExpression = filters.orden === 'Terminal'
+  const terminalConditions = conditions.join(' AND ');
+  if (filters.visitas) {
+    const v = filters.visitas;
+    if (v.presencia) conditions.push(v.presencia === 'con' ? 'COALESCE(uv.tiene_visitas_registradas,false)' : 'NOT COALESCE(uv.tiene_visitas_registradas,false)');
+    if (v.visita_desde) conditions.push(`t.activa AND uv.ultima_visita >= ${addValue(v.visita_desde)}::timestamptz`);
+    if (v.visita_hasta) conditions.push(`t.activa AND uv.ultima_visita < ${addValue(v.visita_hasta)}::timestamptz`);
+    if (v.meses) conditions.push(`t.activa AND uv.ultima_visita < ((date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE 'America/Tegucigalpa')
+      - (${addValue(v.meses)}::int - 1) * interval '1 month') AT TIME ZONE 'America/Tegucigalpa')`);
+  }
+  const sortExpression = filters.orden === 'ultima_visita'
+    ? '(CASE WHEN t.activa THEN uv.ultima_visita END)'
+    : filters.orden === 'Terminal'
     ? 't.terminal'
     : `(t.datos_excel ->> ${addValue(filters.orden)})`;
 
@@ -58,7 +74,8 @@ function buildSearchQuery(filters) {
   const limitParam = addValue(filters.limite);
   const direction = filters.direccion === 'desc' ? 'DESC' : 'ASC';
 
-  const text = `
+  const joinAntes = visitasEnabled && (filters.visitas || filters.orden === 'ultima_visita');
+  let text = `
     SELECT
       t.terminal,
       t.datos_excel,
@@ -69,19 +86,41 @@ function buildSearchQuery(filters) {
       t.fecha_creacion,
       t.fecha_actualizacion,
       t.fecha_ultima_sincronizacion,
+      ${joinAntes ? 'CASE WHEN t.activa THEN uv.ultima_visita END AS ultima_visita, COALESCE(uv.tiene_visitas_registradas,false) AS tiene_visitas_registradas,' : ''}
       COUNT(*) OVER() AS total_count
     FROM public.terminales AS t
+    ${joinAntes ? `LEFT JOIN (
+      SELECT v.terminal, MAX(v.fecha) FILTER (WHERE v.fecha < ${MONTH_END}) AS ultima_visita,
+        true AS tiene_visitas_registradas FROM public.visitas_tecnicas v
+      WHERE EXISTS (SELECT 1 FROM public.terminales t WHERE t.terminal=v.terminal AND ${terminalConditions})
+      GROUP BY v.terminal
+    ) uv ON uv.terminal=t.terminal` : ''}
     WHERE ${conditions.join(' AND ')}
     ORDER BY ${sortExpression} ${direction} NULLS LAST, t.terminal ASC
     OFFSET ${offsetParam}
     LIMIT ${limitParam}
   `;
 
+  if (visitasEnabled && !joinAntes) {
+    // Sin filtros/orden por visitas, la página de cartera ya está determinada.
+    // Reducir el agregado a sus terminales no cambia selección, total ni orden.
+    text = `WITH pagina AS MATERIALIZED (${text})
+      SELECT t.*, CASE WHEN t.activa THEN uv.ultima_visita END AS ultima_visita,
+        COALESCE(uv.tiene_visitas_registradas,false) AS tiene_visitas_registradas
+      FROM pagina t LEFT JOIN (
+        SELECT v.terminal, MAX(v.fecha) FILTER (WHERE v.fecha < ${MONTH_END}) AS ultima_visita,
+          true AS tiene_visitas_registradas FROM public.visitas_tecnicas v
+        WHERE EXISTS (SELECT 1 FROM pagina p WHERE p.terminal=v.terminal)
+        GROUP BY v.terminal
+      ) uv ON uv.terminal=t.terminal
+      ORDER BY ${sortExpression} ${direction} NULLS LAST,t.terminal ASC`;
+  }
   return { text, values };
 }
 
 function mapTerminal(row) {
   return {
+    ...(Object.hasOwn(row, 'ultima_visita') ? { ultima_visita: row.ultima_visita, tiene_visitas_registradas: row.tiene_visitas_registradas } : {}),
     terminal: row.terminal,
     activa: row.activa,
     version: row.version,
@@ -94,8 +133,8 @@ function mapTerminal(row) {
   };
 }
 
-async function searchTerminales(pool, filters) {
-  const result = await pool.query(buildSearchQuery(filters));
+async function searchTerminales(pool, filters, visitasEnabled = false) {
+  const result = await pool.query(buildSearchQuery(filters, visitasEnabled));
   const total = result.rows.length === 0 ? 0 : Number(result.rows[0].total_count);
   return { datos: result.rows.map(mapTerminal), total };
 }

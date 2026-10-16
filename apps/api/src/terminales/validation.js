@@ -1,3 +1,4 @@
+const { fecha } = require('../visitas/reportes');
 const { FILTER_FIELDS, INTERNAL_FIELDS, SEARCH_FIELDS, SORT_FIELDS } = require('./fields');
 
 const CAMPOS_PERMITIDOS = Object.freeze(['todos', 'terminal', ...SEARCH_FIELDS.filter((field) => field !== 'Terminal')]);
@@ -58,7 +59,7 @@ function parseSearchParams(query) {
   }
 
   const orden = rawOrden || 'NombreComercial';
-  if (!SORT_FIELDS.includes(orden)) throw new ValidationError('El parámetro orden no es válido.');
+  if (!SORT_FIELDS.includes(orden) && orden !== 'ultima_visita') throw new ValidationError('El parámetro orden no es válido.');
   const direccion = rawDireccion || 'asc';
   if (!['asc', 'desc'].includes(direccion)) throw new ValidationError('El parámetro direccion no es válido.');
 
@@ -71,6 +72,28 @@ function parseSearchParams(query) {
     }
   }
 
+  const visitas = {};
+  const presencia = getSingleQueryValue(query.visitas, 'visitas');
+  if (presencia !== undefined) {
+    if (!['con', 'sin'].includes(presencia)) throw new ValidationError('El filtro visitas no es válido.');
+    visitas.presencia = presencia;
+  }
+  for (const key of ['visita_desde', 'visita_hasta']) {
+    const value = getSingleQueryValue(query[key], key);
+    if (value !== undefined) {
+      try { visitas[key] = fecha(value); } catch (_) { throw new ValidationError(`El filtro ${key} requiere fecha ISO con zona.`); }
+    }
+  }
+  const padded = (value) => value.replace(/\.(\d+)Z$/u, (_, fraction) => `.${fraction.padEnd(6, '0')}Z`);
+  if (visitas.visita_desde && visitas.visita_hasta && padded(visitas.visita_desde) >= padded(visitas.visita_hasta)) {
+    throw new ValidationError('El rango de visitas no es válido.');
+  }
+  const meses = getSingleQueryValue(query.visita_antiguedad_meses, 'visita_antiguedad_meses');
+  if (meses !== undefined) {
+    if (!['2', '3'].includes(meses)) throw new ValidationError('La antigüedad debe ser 2 o 3 meses calendario.');
+    visitas.meses = Number(meses);
+  }
+
   return {
     q: rawQuery === undefined || rawQuery.trim() === '' ? null : rawQuery.trim(),
     campo,
@@ -79,7 +102,8 @@ function parseSearchParams(query) {
     estado,
     orden,
     direccion,
-    filtros
+    filtros,
+    ...(Object.keys(visitas).length ? { visitas } : {})
   };
 }
 

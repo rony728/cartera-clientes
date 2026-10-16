@@ -62,7 +62,7 @@ function validateChanges(body) {
   };
 }
 
-function createTerminalesRouter({ pool, csrfProtection, sendMailFn, repositoryApi = repository }) {
+function createTerminalesRouter({ pool, csrfProtection, sendMailFn, visitasEnabled = false, repositoryApi = repository }) {
   const router = express.Router();
 
   router.get('/filtros/opciones', async (req, res) => {
@@ -91,7 +91,7 @@ function createTerminalesRouter({ pool, csrfProtection, sendMailFn, repositoryAp
       if (req.user.rol !== 'ADMIN' && filters.estado !== 'activas') {
         return res.status(403).json({ ok: false, mensaje: 'Acceso denegado' });
       }
-      const result = await searchTerminales(pool, filters);
+      const result = await searchTerminales(pool, filters, visitasEnabled);
       return res.status(200).json({
         datos: result.datos,
         paginacion: {
