@@ -7,3 +7,5 @@ Documentación general y decisiones técnicas del monorepo de cartera de cliente
 - [Despliegue HTTPS y seguridad de producción](production-security.md)
 - [Preparación segura para publicación](publication-security.md)
 - [Integración Power Automate por correo V2](power-automate-v2.md)
+
+- [Etapa 2: PostgreSQL y API de visitas técnicas](visitas-etapa2.md)

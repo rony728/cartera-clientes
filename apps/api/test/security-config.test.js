@@ -104,3 +104,9 @@ test('los errores de configuración no incluyen los valores secretos', () => {
     (error) => !error.message.includes(secret)
   );
 });
+
+test('visitas queda deshabilitado por defecto y exige booleano explícito', () => {
+  assert.equal(loadServerConfig(productionEnv()).visitasEnabled, false);
+  assert.equal(loadServerConfig(productionEnv({ VISITAS_ENABLED: 'true' })).visitasEnabled, true);
+  assert.throws(() => loadServerConfig(productionEnv({ VISITAS_ENABLED: 'yes' })), /VISITAS_ENABLED/u);
+});

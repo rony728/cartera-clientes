@@ -1,0 +1,10 @@
+[Unit]
+Description=Comprobar cambios en reportes de visitas (activación pendiente)
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+Unit=cartera-visitas-import.service
+
+[Install]
+WantedBy=timers.target

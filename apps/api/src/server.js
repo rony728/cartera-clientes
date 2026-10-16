@@ -25,6 +25,7 @@ function startServer() {
     trustProxy: config.trustProxy,
     loginLimits: config.loginLimits,
     importEnabled: config.importEnabled,
+    visitasEnabled: config.visitasEnabled,
     snapshotConfig: config.snapshotConfig
   });
   const server = app.listen(config.port, config.host, () => {

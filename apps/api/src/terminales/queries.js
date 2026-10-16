@@ -1,3 +1,4 @@
+const { MONTH_END } = require('../visitas/queries');
 const { FILTER_FIELDS, PWA_INTERNAL_FIELD_SET, SEARCH_FIELDS } = require('./fields');
 
 function escapeLike(value) {
@@ -10,7 +11,7 @@ function getStateCondition(estado) {
   return 'TRUE';
 }
 
-function buildSearchQuery(filters) {
+function buildSearchQuery(filters, visitasEnabled = false) {
   const offset = (filters.pagina - 1) * filters.limite;
   const conditions = [getStateCondition(filters.estado)];
   const values = [];
@@ -69,8 +70,13 @@ function buildSearchQuery(filters) {
       t.fecha_creacion,
       t.fecha_actualizacion,
       t.fecha_ultima_sincronizacion,
+      ${visitasEnabled ? 'uv.ultima_visita,' : ''}
       COUNT(*) OVER() AS total_count
     FROM public.terminales AS t
+    ${visitasEnabled ? `LEFT JOIN (
+      SELECT terminal, MAX(fecha) AS ultima_visita FROM public.visitas_tecnicas
+      WHERE fecha < ${MONTH_END} GROUP BY terminal
+    ) uv ON uv.terminal=t.terminal AND t.activa` : ''}
     WHERE ${conditions.join(' AND ')}
     ORDER BY ${sortExpression} ${direction} NULLS LAST, t.terminal ASC
     OFFSET ${offsetParam}
@@ -82,6 +88,7 @@ function buildSearchQuery(filters) {
 
 function mapTerminal(row) {
   return {
+    ...(Object.hasOwn(row, 'ultima_visita') ? { ultima_visita: row.ultima_visita } : {}),
     terminal: row.terminal,
     activa: row.activa,
     version: row.version,
@@ -94,8 +101,8 @@ function mapTerminal(row) {
   };
 }
 
-async function searchTerminales(pool, filters) {
-  const result = await pool.query(buildSearchQuery(filters));
+async function searchTerminales(pool, filters, visitasEnabled = false) {
+  const result = await pool.query(buildSearchQuery(filters, visitasEnabled));
   const total = result.rows.length === 0 ? 0 : Number(result.rows[0].total_count);
   return { datos: result.rows.map(mapTerminal), total };
 }

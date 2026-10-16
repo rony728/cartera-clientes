@@ -1,4 +1,5 @@
 const express = require('express');
+const { createVisitasRouter } = require('./visitas/routes');
 const authRepository = require('./auth/repository');
 const { createAuthRouter } = require('./auth/routes');
 const { createAuthorization } = require('./auth/authorization');
@@ -17,6 +18,7 @@ function createApp({
   checkDatabaseFn = checkDatabase,
   sendMailFn = sendMail,
   importEnabled = false,
+  visitasEnabled = false,
   snapshotConfig = {},
   importService,
   synchronizationRepository,
@@ -74,7 +76,11 @@ function createApp({
     pool: databasePool,
     csrfProtection,
     sendMailFn,
+    visitasEnabled,
     ...(terminalRepository ? { repositoryApi: terminalRepository } : {})
+  }));
+  app.use('/api/v1/visitas', access.requireAuth, createVisitasRouter({
+    pool: databasePool, enabled: visitasEnabled, requireAdmin: access.requireAdmin
   }));
   app.use('/api/v1/sincronizaciones', access.requireAuth, access.requireAdmin, createSynchronizationsRouter({
     pool: databasePool,
