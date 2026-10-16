@@ -1,5 +1,18 @@
 const { FUENTES, ReportError, readReportes } = require('./reportes');
 
+async function refreshCanonical(client, ids) {
+  if (!ids.length) return;
+  await client.query({ text: `INSERT INTO public.visitas_actuales
+    (id,terminal,fecha,tecnico,tipo_visita,fuente,modificado,recibido,importacion_id)
+    SELECT DISTINCT ON (id) id,terminal,fecha,tecnico,tipo_visita,fuente,modificado,recibido,importacion_id
+    FROM public.visitas_fuentes WHERE id=ANY($1::bigint[])
+    ORDER BY id,modificado DESC NULLS LAST,recibido DESC,fuente DESC
+    ON CONFLICT(id) DO UPDATE SET terminal=EXCLUDED.terminal,fecha=EXCLUDED.fecha,
+      tecnico=EXCLUDED.tecnico,tipo_visita=EXCLUDED.tipo_visita,fuente=EXCLUDED.fuente,
+      modificado=EXCLUDED.modificado,recibido=EXCLUDED.recibido,importacion_id=EXCLUDED.importacion_id`,
+  values: [ids] });
+}
+
 async function importVisitas({ pool, config, readFn = readReportes }) {
   const attempt = await pool.query(`INSERT INTO public.importaciones_visitas(resultado)
     VALUES ('PROCESANDO') RETURNING id`);
@@ -14,10 +27,12 @@ async function importVisitas({ pool, config, readFn = readReportes }) {
     }]));
     client = await pool.connect();
     await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '5s'; SET LOCAL statement_timeout = '60s'");
     const lock = await client.query("SELECT pg_try_advisory_xact_lock(hashtext('cartera-clientes:visitas')) AS acquired");
     if (!lock.rows[0].acquired) throw new ReportError('IMPORTACION_EN_CURSO');
     const current = await client.query('SELECT * FROM public.visitas_reportes');
     let changed = false;
+    const affected = new Set();
     for (const source of FUENTES) {
       const report = reports[source];
       const previous = current.rows.find((row) => row.fuente === source);
@@ -26,6 +41,7 @@ async function importVisitas({ pool, config, readFn = readReportes }) {
       }
       if (!previous || previous.hash !== report.hash) {
         changed = true;
+        report.records.forEach((row) => affected.add(row.id));
         // Un solo INSERT por fuente; filas ausentes se conservan.
         const payload = report.records.map((row) => ({ ...row, fuente: source, recibido: report.recibido }));
         await client.query({ text: `INSERT INTO public.visitas_fuentes
@@ -42,9 +58,12 @@ async function importVisitas({ pool, config, readFn = readReportes }) {
       }
       if (previous && previous.hash === report.hash
           && +new Date(previous.recibido) !== +new Date(report.recibido)) {
+        report.records.forEach((row) => affected.add(row.id));
         // Misma carga, nueva recepción: actualizar solo la procedencia para desempates.
-        await client.query({ text: 'UPDATE public.visitas_fuentes SET recibido=$2 WHERE fuente=$1 AND id=ANY($3::bigint[])',
-          values: [source, report.recibido, report.records.map((row) => row.id)] });
+        await client.query({ text: `UPDATE public.visitas_fuentes v SET recibido=$2
+          FROM jsonb_to_recordset($3::jsonb) AS r(id bigint, datos jsonb)
+          WHERE v.fuente=$1 AND v.id=r.id AND v.datos=r.datos`,
+          values: [source, report.recibido, JSON.stringify(report.records.map((row) => ({ id: row.id, datos: row.datos })))] });
       }
       // También registrar recepción nueva de contenido idéntico, sin reprocesar filas.
       if (!previous || previous.hash !== report.hash || +new Date(previous.recibido) !== +new Date(report.recibido)) {
@@ -56,6 +75,7 @@ async function importVisitas({ pool, config, readFn = readReportes }) {
         values: [source, report.hash, report.records.length, report.recibido, report.procesado, id] });
       }
     }
+    await refreshCanonical(client, [...affected]);
     const estado = changed ? 'COMPLETADA' : 'SIN_CAMBIOS';
     await client.query({ text: `UPDATE public.importaciones_visitas SET fin=now(),resultado=$2,reportes=$3::jsonb WHERE id=$1`,
       values: [id, estado, JSON.stringify(metadata)] });
@@ -68,4 +88,4 @@ async function importVisitas({ pool, config, readFn = readReportes }) {
     throw new ReportError(code);
   } finally { if (client) client.release(); }
 }
-module.exports = { importVisitas };
+module.exports = { importVisitas, refreshCanonical };

@@ -4,7 +4,8 @@ const MONTH_END = `((date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE 'America
 const LAST_VISIT = `(SELECT MAX(v.fecha) FROM public.visitas_tecnicas v
   WHERE v.terminal=t.terminal AND t.activa AND v.fecha < ${MONTH_END})`;
 async function ultima(pool, terminal, admin) {
-  const result = await pool.query({ text: `SELECT t.terminal, ${LAST_VISIT} AS ultima_visita
+  const result = await pool.query({ text: `SELECT t.terminal, ${LAST_VISIT} AS ultima_visita,
+    EXISTS (SELECT 1 FROM public.visitas_tecnicas v WHERE v.terminal=t.terminal) AS tiene_visitas_registradas
     FROM public.terminales t WHERE t.terminal=$1 AND (t.activa OR $2::boolean)`, values: [terminal, admin] });
   return result.rows[0] || null;
 }

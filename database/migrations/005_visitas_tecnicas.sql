@@ -1,4 +1,6 @@
 BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
 
 CREATE TABLE public.importaciones_visitas (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -38,11 +40,30 @@ CREATE INDEX ix_visitas_tecnico_fecha ON public.visitas_fuentes (tecnico, fecha)
 CREATE INDEX ix_visitas_fecha ON public.visitas_fuentes (fecha);
 CREATE INDEX ix_importaciones_visitas_inicio ON public.importaciones_visitas (inicio DESC);
 
--- Una sola visita lógica por ID. Mayor Modified, luego recepción; empate: mensual.
+-- Proyección canónica sin JSONB: una fila ganadora por ID, actualizada en la
+-- misma transacción que las fuentes para no resolver todo el histórico al leer.
+CREATE TABLE public.visitas_actuales (
+  id bigint PRIMARY KEY,
+  terminal text NOT NULL,
+  fecha timestamptz NOT NULL,
+  tecnico text NOT NULL,
+  tipo_visita text NOT NULL,
+  fuente text NOT NULL,
+  modificado timestamptz,
+  recibido timestamptz NOT NULL,
+  importacion_id bigint NOT NULL REFERENCES public.importaciones_visitas(id),
+  FOREIGN KEY (fuente,id) REFERENCES public.visitas_fuentes(fuente,id)
+);
+CREATE INDEX ix_visitas_actuales_terminal_fecha ON public.visitas_actuales (terminal,fecha DESC);
+CREATE INDEX ix_visitas_actuales_tecnico_fecha ON public.visitas_actuales (tecnico,fecha);
+CREATE INDEX ix_visitas_actuales_fecha ON public.visitas_actuales (fecha);
 CREATE VIEW public.visitas_tecnicas AS
-  SELECT DISTINCT ON (id) id, terminal, fecha, tecnico, tipo_visita, datos,
-    fuente, modificado, recibido, importacion_id
-  FROM public.visitas_fuentes
-  ORDER BY id, modificado DESC NULLS LAST, recibido DESC, fuente DESC;
+  SELECT id,terminal,fecha,tecnico,tipo_visita,fuente,modificado,recibido,importacion_id
+  FROM public.visitas_actuales;
+
+-- Ningún acceso público implícito; grants explícitos por rol tras la migración.
+REVOKE ALL ON public.importaciones_visitas, public.visitas_reportes,
+  public.visitas_fuentes, public.visitas_actuales, public.visitas_tecnicas FROM PUBLIC;
+REVOKE ALL ON SEQUENCE public.importaciones_visitas_id_seq FROM PUBLIC;
 
 COMMIT;

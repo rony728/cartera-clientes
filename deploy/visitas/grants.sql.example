@@ -1,0 +1,10 @@
+-- Revisar y ejecutar con ON_ERROR_STOP y variables api_role/import_role.
+-- No crea usuarios ni cambia credenciales. El propietario NO debe ser el rol API.
+BEGIN;
+GRANT USAGE ON SCHEMA public TO :"api_role", :"import_role";
+GRANT SELECT (id, terminal, fecha, tecnico) ON public.visitas_tecnicas TO :"api_role";
+GRANT SELECT ON public.visitas_reportes, public.importaciones_visitas TO :"api_role";
+GRANT SELECT, INSERT, UPDATE ON public.visitas_actuales, public.visitas_fuentes, public.visitas_reportes,
+  public.importaciones_visitas TO :"import_role";
+GRANT USAGE ON SEQUENCE public.importaciones_visitas_id_seq TO :"import_role";
+COMMIT;

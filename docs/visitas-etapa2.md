@@ -20,10 +20,12 @@ privados únicamente para verificar estructura/tipos/formatos; no se copian a Gi
 - `visitas_fuentes`: PK (fuente, ID SharePoint bigint positivo), Terminal de texto,
   Fecha/Modified/recepción timestamptz, técnico, tipo y registro completo JSONB.
   No hay FK a terminales: admite terminales inactivas o desconocidas.
-- `visitas_tecnicas`: vista canónica con una sola fila por ID. Gana mayor Modified
+- `visitas_actuales`: proyección transaccional, indexada y sin JSONB, con una sola fila por ID.
+  `visitas_tecnicas` ofrece una vista de lectura de esa proyección. Gana mayor Modified
   (un valor presente gana a uno ausente), luego recepción del reporte y, en empate,
   mensual sobre histórico. Esta prioridad es independiente del orden de importación.
   No se deduplica por terminal. La misma visita entre fuentes cuenta una sola vez.
+  Las fuentes conservan el JSONB; actualizar fuentes y proyección es atómico.
 - `visitas_reportes`: último hash, cantidad, recepción/procesamiento local y fecha de
   importación exitosa por fuente.
 - `importaciones_visitas`: inicio/fin, resultado, código seguro de error y metadatos
@@ -64,15 +66,17 @@ Todas las rutas usan la sesión persistente y verificación de usuario activo ex
 
 | Ruta | Acceso y respuesta |
 | --- | --- |
-| `GET /api/v1/visitas/terminales/:terminal/ultima` | Usuarios autenticados; `{terminal, ultima_visita}`. Terminal desconocida: 404. Inactiva: 404 para usuario normal; ADMIN recibe null. |
+| `GET /api/v1/visitas/terminales/:terminal/ultima` | Usuarios autenticados; `{terminal, ultima_visita, tiene_visitas_registradas}`. Terminal desconocida: 404. Inactiva: 404 para usuario normal; ADMIN recibe null. |
 | `GET /api/v1/visitas/estadisticas/mensual` | Usuarios autenticados; zona, límites desde/hasta y conteos para RTDOMINGUEZ/ERMEJIA, incluidos ceros. |
 | `GET /api/v1/visitas/estado` | Solo ADMIN; estados de ambas fuentes y último intento. No incluye rutas ni registros JSON. |
-| `GET /api/v1/terminales` | Con habilitación añade `ultima_visita` mediante agregado MAX y LEFT JOIN en una sola consulta, sin cambiar filtros, paginación ni orden. Inactivas: null. |
+| `GET /api/v1/terminales` | Con habilitación añade `ultima_visita` y `tiene_visitas_registradas` mediante agregado MAX y LEFT JOIN en una sola consulta. Inactivas: null. |
 
 No hay endpoint de importación ni acceso HTTP a archivos. `datos` JSONB permanece
 privado. No se expone ID SharePoint ni comentarios/datos personales de visitas.
 La fecha máxima se calcula sobre todos los datos importados retenidos para cada
-terminal activa. Null indica ausencia en los datos disponibles, no ausencia histórica
+terminal activa. Null indica que no existe una fecha elegible en los datos disponibles para esa
+terminal activa; `tiene_visitas_registradas` distingue ausencia total de visitas de
+visitas exclusivamente posteriores al mes actual. No implica ausencia histórica
 de mantenimiento. Las estadísticas cuentan visitas por ID, incluidas terminales
 inactivas/desconocidas; los técnicos restantes se conservan sin entrar en estos dos
 conteos. No se utiliza EsMesActual ni VisitaValidada como filtro implícito.
@@ -118,8 +122,10 @@ Activación posterior, **solo después de aprobar el PR y autorizar producción*
 
 1. Respaldar PostgreSQL y comprobar roles/espacio y acceso privado de lectura a bundles.
 2. Aplicar únicamente 005 con `psql -v ON_ERROR_STOP=1` bajo el rol de migración;
-   conceder SELECT sobre vista y tablas de estado a la API y DML/uso de secuencias
-   sobre las tablas nuevas al rol importador. No se requieren privilegios Graph.
+   revisar `deploy/visitas/grants.sql.example`: SELECT de columnas no privadas
+   sobre la vista y estados para la API; SELECT/INSERT/UPDATE y USAGE de secuencia
+   para el importador, sin DELETE ni permisos DDL. El rol API no debe ser propietario
+   ni heredar privilegios más amplios sobre estos objetos. No se requieren privilegios Graph.
    No ejecutar test:db:setup sobre una base existente: instala todo el esquema.
 3. Instalar código revisado. Ejecutar una importación controlada con
    VISITAS_IMPORT_ENABLED=true, comprobar tablas/auditoría y hashes sin mostrar JSON.
@@ -136,7 +142,7 @@ aprobado. Las tablas aditivas pueden conservarse sin afectar cartera; no borrar
 visitas ni ejecutar DROP como reversión operativa. Nunca detener la descarga de
 etapa 1. La activación del importador es independiente de la habilitación HTTP.
 
-Resultado final de desarrollo: 100 pruebas de API y 23 pruebas PostgreSQL
+Resultado tras revisión del PR #5: 102 pruebas de API y 30 pruebas PostgreSQL
 satisfactorias, sin omisiones. Incluyen regresión previa, prioridad entre fuentes,
 contenido repetido, filas retenidas, errores, rollback, concurrencia, sesión/roles,
 fechas futuras, cambio de año y febrero bisiesto. El lector también validó ambos
@@ -149,3 +155,30 @@ python3 /home/rony/cartera-clientes/apps/api/scripts/test-visitas-isolated.py /u
 
 El script crea y destruye exclusivamente su cluster temporal; necesita los binarios
 y pg_trgm ya instalados, no toca servicios systemd ni usa credenciales productivas.
+
+## Filtros y orden en PostgreSQL (revisión PR #5)
+
+Con VISITAS_ENABLED=true, el listado admite:
+
+- `visitas=con|sin`: presencia de alguna visita registrada, independientemente del mes.
+- `visita_desde` / `visita_hasta`: ISO con zona explícita; rango de última visita
+  inclusivo desde/exclusivo hasta. Nulos no cumplen un rango.
+- `visita_antiguedad_meses=2|3`: meses calendario de America/Tegucigalpa, por decisión
+  confirmada del usuario. En octubre, agosto o antes cumple 2; julio o antes cumple 3.
+  No incluye terminales sin una fecha elegible ni inactivas con última visita nula.
+- `orden=ultima_visita&direccion=asc|desc`, con nulos al final y desempate por terminal.
+
+Filtros, conteo, orden y selección de página se calculan en SQL. No se clasifica
+una terminal como «reciente» hasta que se defina ese umbral; pueden usarse rangos
+explícitos. Para ordenar/filtrar por visitas se agrega antes de OFFSET/LIMIT.
+Si no hay filtros/orden por visitas, primero se fija la página de cartera y se
+obtienen sus últimas visitas, sin alterar selección ni total de resultados.
+Al deshabilitar visitas, solicitar estos nuevos filtros u orden devuelve 400;
+no se ignoran silenciosamente y el listado anterior sigue funcionando.
+
+La migración 005 sigue pendiente de aplicar: crea solo objetos de visitas, limita
+esperas de locks a 5 segundos y sentencias a 60, y revoca acceso PUBLIC. No altera
+ni bloquea terminales para cambiar su esquema. El importador también limita locks
+(5s) y sentencias (60s). Las pruebas aplicaron la migración únicamente a clusters
+efímeros. Si alguien ya aplicó una versión anterior de 005 fuera de este flujo,
+no debe reejecutarla: se necesita una migración incremental específica.

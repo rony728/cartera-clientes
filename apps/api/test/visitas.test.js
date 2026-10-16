@@ -72,3 +72,21 @@ test('errores HTTP no exponen rutas, JSON ni secretos', async () => {
   assert.equal(result.status, 500);
   assert.doesNotMatch(JSON.stringify(result.body), /privada|secreto/);
 });
+
+test('filtros de visitas se validan y ordenamiento ocurre antes de OFFSET; no asigna umbral a reciente', () => {
+  const { parseSearchParams } = require('../src/terminales/validation');
+  const { buildSearchQuery } = require('../src/terminales/queries');
+  const filters = parseSearchParams({ visitas: 'sin', visita_antiguedad_meses: '2', orden: 'ultima_visita' });
+  assert.equal(filters.visitas.meses, 2);
+  const sql = buildSearchQuery(filters, true);
+  assert.ok(sql.text.indexOf('uv.ultima_visita <') < sql.text.indexOf('OFFSET'));
+  assert.ok(sql.text.indexOf('ORDER BY') < sql.text.indexOf('OFFSET'));
+  assert.throws(() => buildSearchQuery(filters, false), /deshabilitadas/);
+  for (const q of [{ visitas: 'reciente' }, { visitas: ['con','sin'] }, { visita_antiguedad_meses: '2;DROP' }, { orden: 'ultima_visita;DROP' }, { visita_desde: '2026-10-01' }, { visita_desde: '2026-10-02T00:00:00Z', visita_hasta: '2026-10-01T00:00:00Z' }]) {
+    assert.throws(() => parseSearchParams(q));
+  }
+});
+
+test('fechas preservan microsegundos para resolver versiones sin empates artificiales', () => {
+  assert.equal(fecha('2026-10-01T00:00:00.123456-06:00'), '2026-10-01T06:00:00.123456Z');
+});

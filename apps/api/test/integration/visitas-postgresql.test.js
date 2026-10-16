@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { importVisitas } = require('../../src/visitas/service');
+const { importVisitas, refreshCanonical } = require('../../src/visitas/service');
 const { parseReporte, ReportError } = require('../../src/visitas/reportes');
 const queries = require('../../src/visitas/queries');
 const { searchTerminales } = require('../../src/terminales/queries');
@@ -39,7 +39,7 @@ test('histórico y mensual consolidan ID, conservan JSONB, ceros y visitas de te
   assert.equal(result.rows.length, 3);
   assert.equal(result.rows[0].fuente, 'mensual');
   assert.equal(result.rows[0].terminal, '00001');
-  assert.deepEqual(result.rows[0].datos.Extra, { prueba: true });
+  assert.deepEqual((await pool.query("SELECT datos FROM public.visitas_fuentes WHERE fuente='mensual' AND id=1")).rows[0].datos.Extra, { prueba: true });
   assert.equal(result.rows[1].terminal, '00003');
   assert.equal(result.rows[2].terminal, '00999');
   const state = await queries.estado(pool);
@@ -189,4 +189,150 @@ test('una fila ausente retenida no recibe la fecha nueva de un reporte idéntico
   await run(empty, make([{ ...BASE, TipoVisita: 'Mensual' }], '2026-10-18T00:00:00Z'));
   await run({ ...empty, recibido: '2026-10-19T00:00:00Z' }, make([{ ...BASE, TipoVisita: 'Mensual' }], '2026-10-18T00:00:00Z'));
   assert.equal((await pool.query('SELECT tipo_visita FROM public.visitas_tecnicas')).rows[0].tipo_visita, 'Mensual');
+});
+
+test('retención indefinida, categorías por meses calendario y filtros/orden previos a paginación', async () => {
+  await pool.query(`INSERT INTO public.terminales(terminal,datos_excel,activa)
+    SELECT lpad(n::text,5,'0'),jsonb_build_object('NombreComercial',n::text),true FROM generate_series(1,7) n`);
+  const dates = ['2026-10-12T06:00:00Z','2026-08-31T23:59:59-06:00','2026-07-31T23:59:59-06:00',
+    '2020-01-01T00:00:00Z', '2026-10-31T23:59:59.999999-06:00', '2026-11-01T00:00:00-06:00'];
+  await run(make(dates.map((Fecha, index) => ({ ...BASE, ID: index + 1, Terminal: String(index + 1).padStart(5,'0'), Fecha }))), make([]));
+  // Los dos reportes pierden todas las visitas; ninguna debe borrarse.
+  await run(make([], '2026-10-17T00:00:00Z'), make([], '2026-10-17T00:00:00Z'));
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM public.visitas_tecnicas')).rows[0].n, 6);
+  const db = fixedPool('2026-10-16T12:00:00Z');
+  const list = (q) => searchTerminales(db, parseSearchParams(q), true);
+  const all = await list({ orden: 'Terminal' });
+  assert.equal(all.total, 7);
+  assert.equal(new Set(all.datos.map((x) => x.terminal)).size, 7);
+  assert.equal(all.datos[5].ultima_visita, null); // visita existe pero es del próximo mes
+  assert.equal(all.datos[5].tiene_visitas_registradas, true);
+  assert.equal(all.datos[6].ultima_visita, null);
+  assert.equal(all.datos[6].tiene_visitas_registradas, false);
+  assert.deepEqual((await list({ visitas:'sin' })).datos.map((r) => r.terminal), ['00007']);
+  const two = await list({ visita_antiguedad_meses:'2', orden:'ultima_visita', direccion:'desc', limite:'1' });
+  assert.equal(two.total, 3); assert.equal(two.datos[0].terminal, '00002');
+  const page2 = await list({ visita_antiguedad_meses:'2', orden:'ultima_visita', direccion:'desc', limite:'1', pagina:'2' });
+  assert.equal(page2.total, 3); assert.equal(page2.datos[0].terminal, '00003');
+  const three = await list({ visita_antiguedad_meses:'3', orden:'ultima_visita', direccion:'desc' });
+  assert.deepEqual(three.datos.map((r) => r.terminal), ['00003','00004']);
+  const recentRange = await list({ visita_desde:'2026-10-01T00:00:00-06:00', visita_hasta:'2026-11-01T00:00:00-06:00', orden:'ultima_visita', direccion:'desc', limite:'1' });
+  assert.equal(recentRange.total, 2); assert.equal(recentRange.datos[0].terminal, '00005');
+  assert.equal((await queries.ultima(db, '00007', false)).tiene_visitas_registradas, false);
+  assert.equal((await queries.ultima(db, '00006', false)).tiene_visitas_registradas, true);
+  // En diciembre, enero todavía tiene antigüedad por año calendario correcto.
+  const january = await searchTerminales(fixedPool('2027-01-01T12:00:00Z'), parseSearchParams({ visita_antiguedad_meses:'2' }), true);
+  assert.equal(january.total, 6);
+});
+
+test('versiones con microsegundos se resuelven sin duplicar ID ni retroceder Modified', async () => {
+  const old = { ...BASE, Fecha:'2026-08-01T00:00:00Z', Modified:'2026-10-01T00:00:00.123456Z' };
+  const fresh = { ...BASE, Fecha:'2026-10-01T00:00:00Z', Modified:'2026-10-01T00:00:00.123457Z' };
+  await run(make([fresh]), make([old]));
+  assert.equal((await pool.query('SELECT fuente FROM public.visitas_tecnicas')).rows[0].fuente, 'historico');
+  // Un contenido obsoleto no reemplaza la versión guardada en esa fuente.
+  await run(make([old], '2026-10-17T00:00:00Z'), make([fresh], '2026-10-18T00:00:00Z'));
+  await run(make([old], '2026-10-19T00:00:00Z'), make([fresh], '2026-10-18T00:00:00Z'));
+  const result = (await pool.query('SELECT fuente FROM public.visitas_tecnicas')).rows;
+  assert.equal(result.length, 1); assert.equal(result[0].fuente, 'mensual');
+});
+
+test('archivo/importación fallida no afecta listado, salud ni últimas visitas ya importadas', async () => {
+  await terminals();
+  await run(make([BASE]), make([]));
+  await assert.rejects(importVisitas({ pool, readFn: async () => { throw new ReportError('REPORTE_NO_DISPONIBLE'); } }));
+  const app = createApp({ apiKey:'test', databasePool:pool, checkDatabaseFn:async () => pool.query('SELECT 1'), visitasEnabled:true, ...baseAppOptions() });
+  const server = app.listen(0,'127.0.0.1'); await new Promise((resolve) => server.once('listening',resolve));
+  try {
+    for (const url of ['/api/v1/terminales','/api/v1/visitas/terminales/00001/ultima','/api/v1/health']) {
+      const res = await fetch(`http://127.0.0.1:${server.address().port}${url}`, { headers: { 'X-API-Key':'test' } });
+      assert.equal(res.status,200);
+    }
+  } finally { await new Promise((resolve) => server.close(resolve)); }
+});
+
+test('roles mínimos pueden consultar/importar pero no leer JSON privado ni borrar/alterar tablas', async () => {
+  await terminals();
+  const client = await pool.connect();
+  try {
+    await client.query('CREATE ROLE visita_reader_test; CREATE ROLE visita_importer_test');
+    const fs = require('node:fs/promises'); const path = require('node:path');
+    const grants = (await fs.readFile(path.resolve(__dirname,'../../../../deploy/visitas/grants.sql.example'),'utf8'))
+      .replaceAll(':"api_role"','visita_reader_test').replaceAll(':"import_role"','visita_importer_test');
+    await client.query(grants);
+    await client.query('GRANT SELECT ON public.terminales TO visita_reader_test'); // permiso previo de cartera
+    await client.query('SET ROLE visita_importer_test');
+    const restrictedPool = { query: (...a) => client.query(...a), connect: async () => ({ query:(...a) => client.query(...a), release() {} }) };
+    assert.equal((await importVisitas({ pool:restrictedPool, readFn:async () => ({ historico:make([BASE]),mensual:make([]) }) })).estado, 'COMPLETADA');
+    await assert.rejects(client.query('DELETE FROM public.visitas_fuentes'), /permission denied/);
+    await client.query('RESET ROLE; SET ROLE visita_reader_test');
+    await queries.estadisticas(client);
+    await queries.ultima(client,'00001',false);
+    await queries.estado(client);
+    await searchTerminales(client,parseSearchParams({}),true);
+    await assert.rejects(client.query('SELECT * FROM public.visitas_tecnicas'), /permission denied/);
+    await assert.rejects(client.query('SELECT * FROM public.visitas_fuentes'), /permission denied/);
+    await assert.rejects(client.query('DELETE FROM public.visitas_reportes'), /permission denied/);
+    await assert.rejects(client.query('ALTER TABLE public.visitas_fuentes ADD COLUMN forbidden text'), /must be owner/);
+  } finally {
+    await client.query('RESET ROLE; DROP OWNED BY visita_reader_test, visita_importer_test; DROP ROLE visita_reader_test, visita_importer_test');
+    client.release();
+  }
+});
+
+test('rendimiento y cardinalidad con 100 mil filas fuente: agregado único, búsqueda y páginas sin duplicados', async (t) => {
+  await pool.query(`INSERT INTO public.terminales(terminal,datos_excel,activa)
+    SELECT lpad(n::text,5,'0'),jsonb_build_object('NombreComercial','Comercio '||n),true FROM generate_series(1,1000) n`);
+  const attempt = await pool.query("INSERT INTO public.importaciones_visitas(resultado) VALUES('COMPLETADA') RETURNING id");
+  await pool.query({ text: `INSERT INTO public.visitas_fuentes
+    (fuente,id,terminal,fecha,tecnico,tipo_visita,modificado,recibido,datos,importacion_id)
+    SELECT fuente,n,lpad((1+n%1000)::text,5,'0'),CURRENT_TIMESTAMP-(n%4000)*interval '1 day',
+    'RTDOMINGUEZ','Soporte',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,
+    jsonb_build_object('ID',n,'Comentarios',repeat('sintetico ',100)),$1
+    FROM generate_series(1,50000) n CROSS JOIN unnest(ARRAY['historico','mensual']) fuente`, values:[attempt.rows[0].id] });
+  await refreshCanonical(pool, Array.from({ length:50000 }, (_,i) => String(i+1)));
+  await pool.query('ANALYZE public.visitas_fuentes; ANALYZE public.visitas_actuales; ANALYZE public.terminales');
+  const { buildSearchQuery } = require('../../src/terminales/queries');
+  const timings = {};
+  for (const [name, params] of [['listado',{}], ['busqueda',{ q:'00001', campo:'terminal' }], ['antiguedad',{ visita_antiguedad_meses:'2', orden:'ultima_visita' }]]) {
+    for (const enabled of (name === 'antiguedad' ? [true] : [false,true])) {
+      const query = buildSearchQuery(parseSearchParams(params),enabled);
+      const explain = await pool.query({ text:'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '+query.text, values:query.values });
+      const plan = explain.rows[0]['QUERY PLAN'][0];
+      timings[name+(enabled ? '_visitas_ms' : '_base_ms')] = plan['Execution Time'];
+      const nodes = [];
+      const walk = (node) => { nodes.push(node); (node.Plans || []).forEach(walk); };
+      walk(plan.Plan);
+      assert.ok(nodes.filter((node) => /Aggregate/u.test(node['Node Type'])).every((node) => node['Actual Loops'] <= 1));
+    }
+  }
+  const first = await searchTerminales(pool, parseSearchParams({ orden:'Terminal', limite:'100' }), true);
+  const second = await searchTerminales(pool, parseSearchParams({ orden:'Terminal', limite:'100', pagina:'2' }), true);
+  assert.equal(first.total, 1000); assert.equal(second.total, 1000);
+  assert.equal(new Set([...first.datos,...second.datos].map((row) => row.terminal)).size, 200);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM public.visitas_tecnicas')).rows[0].n,50000);
+  t.diagnostic('EXPLAIN ANALYZE (100000 filas fuente / 50000 IDs / 1000 terminales): '+JSON.stringify(timings));
+});
+
+test('corregir Terminal/Fecha de un ID actualiza MAX sin dejar duplicados ni máximos obsoletos', async () => {
+  await terminals();
+  await run(make([BASE,{ ...BASE,ID:2,Fecha:'2026-09-01T06:00:00Z' }]),make([]));
+  await run(make([{ ...BASE,Terminal:'00002',Fecha:'2026-08-01T06:00:00Z',Modified:'2026-10-17T06:00:00Z' }], '2026-10-17T12:00:00Z'),make([]));
+  const db = fixedPool('2026-10-18T06:00:00Z');
+  assert.equal((await queries.ultima(db,'00001',false)).ultima_visita.toISOString(),'2026-09-01T06:00:00.000Z');
+  assert.equal((await queries.ultima(db,'00002',false)).ultima_visita.toISOString(),'2026-08-01T06:00:00.000Z');
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM public.visitas_tecnicas')).rows[0].n,2);
+});
+
+test('fallo al mantener la proyección canónica revierte también fuentes y estado de reportes', async () => {
+  await run(make([BASE]),make([]));
+  await pool.query(`CREATE FUNCTION public.fail_projection_test() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'fallo simulado'; END $$;
+    CREATE TRIGGER fail_projection BEFORE INSERT OR UPDATE ON public.visitas_actuales FOR EACH ROW EXECUTE FUNCTION public.fail_projection_test()`);
+  try {
+    await assert.rejects(run(make([{ ...BASE, ID:2 }], '2026-10-17T00:00:00Z'),make([])),/IMPORTACION_FALLIDA/);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM public.visitas_actuales')).rows[0].n,1);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM public.visitas_fuentes')).rows[0].n,1);
+    assert.equal((await pool.query("SELECT cantidad FROM public.visitas_reportes WHERE fuente='historico'")).rows[0].cantidad,1);
+  } finally { await pool.query('DROP TRIGGER fail_projection ON public.visitas_actuales; DROP FUNCTION public.fail_projection_test()'); }
 });

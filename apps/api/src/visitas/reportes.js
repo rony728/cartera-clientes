@@ -19,7 +19,9 @@ function fecha(value) {
       || Number(value.slice(17, 19)) > 59 || !Number.isFinite(Date.parse(value))) {
     throw new ReportError('FECHA_INVALIDA');
   }
-  return new Date(value).toISOString();
+  const iso = new Date(value).toISOString();
+  const fraction = value.match(/\.(\d{4,6})/u)?.[1];
+  return fraction ? iso.replace(/\.\d{3}Z$/u, `.${fraction.padEnd(6, '0')}Z`) : iso;
 }
 function parseReporte(buffer) {
   let rows;
