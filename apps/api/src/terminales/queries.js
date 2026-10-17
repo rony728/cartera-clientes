@@ -51,8 +51,11 @@ function buildSearchQuery(filters, visitasEnabled = false) {
   for (const [field, value] of Object.entries(filters.filtros || {})) {
     if (!FILTER_FIELDS.includes(field)) continue;
     const key = addValue(field);
-    const filterValue = addValue(value);
-    conditions.push(`(t.datos_excel ->> ${key}) = ${filterValue}`);
+    const variants = filters.variantes?.[field];
+    const filterValue = addValue(variants || value);
+    conditions.push(variants
+      ? `(t.datos_excel ->> ${key}) = ANY(${filterValue}::text[])`
+      : `(t.datos_excel ->> ${key}) = ${filterValue}`);
   }
 
   const terminalConditions = conditions.join(' AND ');

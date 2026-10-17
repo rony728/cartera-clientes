@@ -228,12 +228,12 @@ describe('interfaz de Comercios',()=>{
   expect(document.querySelector('.commerce-table col')).toHaveStyle({width:'370px'});
  });
 
- it('consulta todas las variantes equivalentes online sin alterar los valores',async()=>{
+ it('envía todas las variantes equivalentes en una consulta paginada al backend',async()=>{
   renderCommerce('/comercios?Comunicacion=GPRS');
   await screen.findByRole('link',{name:'Café Central'});
   await waitFor(()=>{
-   expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:'GPRS'})}),expect.any(AbortSignal));
-   expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:' Gprs '})}),expect.any(AbortSignal));
+   expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:'GPRS'}),variantes:{Comunicacion:['GPRS',' Gprs ']},pagina:1,limite:20}),expect.any(AbortSignal));
+   expect(mocks.searchTerminals).toHaveBeenCalledTimes(1);
   });
  });
 
@@ -245,8 +245,7 @@ describe('interfaz de Comercios',()=>{
   await user.click(screen.getByRole('button',{name:/Herramientas/u}));
   await user.click(screen.getByRole('menuitem',{name:'Exportar .xlsx'}));
   await waitFor(()=>expect(mocks.exportTerminals).toHaveBeenCalledWith([terminal],['Inventario','SeriePOS'],false));
-  expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:'GPRS'}),pagina:1,limite:100}),undefined);
-  expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:' Gprs '}),pagina:1,limite:100}),undefined);
+  expect(mocks.searchTerminals).toHaveBeenCalledWith(expect.objectContaining({filtros:expect.objectContaining({Comunicacion:'GPRS'}),variantes:{Comunicacion:['GPRS',' Gprs ']},pagina:1,limite:100}),undefined);
  });
 
  it('ofrece limpiar búsqueda y quitar filtros en un estado vacío',async()=>{
@@ -290,4 +289,110 @@ describe('interfaz de Comercios',()=>{
   await act(async()=>{await new Promise(resolve=>window.setTimeout(resolve,350));});
   expect(scrollTo).not.toHaveBeenCalled();
  });
+});
+
+describe('visitas en listado móvil y escritorio',()=>{
+ beforeEach(()=>{
+  mocks.user.id='1';
+  mocks.offline=false;
+  mocks.searchTerminals.mockReset().mockResolvedValue({...page,datos:[
+   {...terminal,ultima_visita:'2026-08-31T23:00:00-06:00',tiene_visitas_registradas:true},
+   {...terminal,terminal:'00002',datos_excel:{NombreComercial:'Sin visitas'},ultima_visita:null,tiene_visitas_registradas:false},
+   {...terminal,terminal:'00003',datos_excel:{NombreComercial:'Solo siguiente mes'},ultima_visita:null,tiene_visitas_registradas:true}
+  ]});
+  mocks.api.mockReset().mockResolvedValue({datos:{Comunicacion:['GPRS',' Gprs ']},campos:[]});
+  mocks.getColumns.mockResolvedValue(['Inventario','SeriePOS']);
+  mocks.getColumnWidths.mockResolvedValue({});
+  mocks.saveColumnWidths.mockReset().mockResolvedValue(undefined);
+ });
+
+ it('presenta fecha al final de la tarjeta y en columna, con advertencias accesibles sin alterar copias',async()=>{
+  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-10-17T12:00:00Z'));
+  try{
+   renderCommerce();
+   const card=(await screen.findByRole('link',{name:'Café Central'})).closest('article')!;
+   expect(within(card).getByText('31/08/2026')).toBeInTheDocument();
+   expect(card.querySelector('footer')).toHaveTextContent('Última visita31/08/2026');
+   expect(card.querySelector('footer')!.previousElementSibling).toHaveTextContent('Ver detalles');
+   expect(within(card).getByRole('img',{name:'Última visita de hace 2 meses calendario o más'})).toBeInTheDocument();
+   expect(within(card).getAllByRole('button').map(button=>button.getAttribute('aria-label'))).toEqual(['Copiar Terminal','Copiar Correo','Copiar Celular','Copiar Atendió','Copiar Código','Copiar Serie SIM','Copiar Serie POS']);
+   const noVisits=(screen.getByRole('link',{name:'Sin visitas'})).closest('article')!;
+   expect(within(noVisits).getByText('Sin visitas registradas')).toBeInTheDocument();
+   expect(within(noVisits).getByRole('img',{name:'Sin visitas registradas'})).toBeInTheDocument();
+   const future=screen.getByRole('link',{name:'Solo siguiente mes'}).closest('article')!;
+   expect(within(future).queryByRole('img')).not.toBeInTheDocument();
+   expect(within(future).getByText('Sin fecha de visita disponible')).toBeInTheDocument();
+   const table=screen.getByRole('table');
+   expect(within(table).getByText('31/08/2026')).toBeInTheDocument();
+   expect(within(table).getAllByRole('img')).toHaveLength(2);
+   expect(mocks.searchTerminals).toHaveBeenCalledTimes(1);
+   expect(mocks.api).toHaveBeenCalledWith('/api/v1/terminales/filtros/opciones');
+  }finally{vi.useRealTimers();}
+ });
+
+ it('ordena en el backend en ambas direcciones y permite redimensionar la columna',async()=>{
+  const user=userEvent.setup();renderCommerce('/comercios?pagina=2');
+  await user.click(await screen.findByRole('button',{name:'Ordenar por Última visita'}));
+  await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenLastCalledWith(expect.objectContaining({orden:'ultima_visita',direccion:'asc',pagina:1,limite:20}),expect.any(AbortSignal)));
+  await user.click(screen.getByRole('button',{name:'Ordenar por Última visita, actualmente ascendente'}));
+  await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenLastCalledWith(expect.objectContaining({orden:'ultima_visita',direccion:'desc'}),expect.any(AbortSignal)));
+  const separator=screen.getByRole('separator',{name:'Redimensionar Última visita'});
+  fireEvent.keyDown(separator,{key:'ArrowRight'});
+  expect(mocks.saveColumnWidths).toHaveBeenLastCalledWith('1',expect.objectContaining({ultima_visita:230}));
+ });
+
+ it('conserva visitas, búsqueda y orden al paginar y regresar de una ficha',async()=>{
+  const user=userEvent.setup();
+  renderNavigation('/comercios?q=Caf%C3%A9&visita_antiguedad_meses=2&visita_desde=2026-01-01&visita_hasta=2026-08-31&orden=ultima_visita&direccion=desc');
+  await user.click(await screen.findByRole('button',{name:'Siguiente'}));
+  await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenLastCalledWith(expect.objectContaining({q:'Café',visita_antiguedad_meses:'2',visita_desde:'2026-01-01',visita_hasta:'2026-08-31',orden:'ultima_visita',direccion:'desc',pagina:2}),expect.any(AbortSignal)));
+  await user.click(screen.getByRole('link',{name:'Café Central'}));
+  await user.click(screen.getByRole('link',{name:'Volver al contexto exacto'}));
+  expect(screen.getByText('Página 2 de 2')).toBeInTheDocument();
+  expect(screen.getByRole('combobox',{name:'Ordenar por'})).toHaveValue('ultima_visita');
+ });
+
+ it.each(['','con','sin','2','3'])('selecciona el filtro %s sin filtrar filas en el navegador',async(value)=>{
+  const user=userEvent.setup();renderCommerce(`/comercios?pagina=2${value===''?'&visitas=con':''}`);
+  await user.click(await screen.findByRole('button',{name:/^Filtros/u}));
+  await user.selectOptions(screen.getByRole('combobox',{name:'Visitas técnicas'}),value);
+  await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenLastCalledWith(expect.objectContaining(value==='2'||value==='3'?{visita_antiguedad_meses:value,pagina:1}:value?{visitas:value,pagina:1}:{pagina:1}),expect.any(AbortSignal)));
+  // La página del servidor se muestra completa; el cliente no vuelve a filtrar.
+  expect(screen.getByRole('link',{name:'Solo siguiente mes'})).toBeInTheDocument();
+ });
+
+ it('envía rango y variantes juntos en una página del servidor; limpiar conserva la búsqueda',async()=>{
+  const user=userEvent.setup();renderCommerce('/comercios?Comunicacion=GPRS&visitas=con&q=Caf%C3%A9');
+  await user.click(await screen.findByRole('button',{name:'Filtros (2)'}));
+  fireEvent.change(screen.getByLabelText('Última visita desde'),{target:{value:'2026-08-01'}});
+  fireEvent.change(screen.getByLabelText('Última visita hasta'),{target:{value:'2026-08-31'}});
+  await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenLastCalledWith(expect.objectContaining({visitas:'con',visita_desde:'2026-08-01',visita_hasta:'2026-08-31',variantes:{Comunicacion:['GPRS',' Gprs ']},pagina:1,limite:20}),expect.any(AbortSignal)));
+  await user.click(screen.getByRole('button',{name:'Limpiar filtros'}));
+  await waitFor(()=>expect(mocks.searchTerminals).toHaveBeenLastCalledWith(expect.objectContaining({q:'Café',filtros:expect.objectContaining({Comunicacion:''})}),expect.any(AbortSignal)));
+  expect(mocks.searchTerminals.mock.lastCall![0].visitas).toBeUndefined();
+ });
+
+ it('permite recuperar la consulta comercial tras un error de filtros de visitas',async()=>{
+  mocks.searchTerminals.mockImplementation((state:SearchState)=>state.visitas?Promise.reject(new Error('indisponible')):Promise.resolve(page));
+  const user=userEvent.setup();renderCommerce('/comercios?visitas=con&q=Caf%C3%A9');
+  await user.click(await screen.findByRole('button',{name:'Consultar sin filtros de visitas'}));
+  expect(await screen.findByRole('link',{name:'Café Central'})).toBeInTheDocument();
+  expect(screen.getByRole('textbox',{name:'Buscar comercios'})).toHaveValue('Café');
+ });
+});
+
+
+it('no conserva resultados de otro usuario mientras carga su página',async()=>{
+ mocks.user.id='1';mocks.offline=false;
+ mocks.api.mockResolvedValue({datos:{},campos:[]});
+ mocks.searchTerminals.mockResolvedValue(page);
+ const user=userEvent.setup();renderCommerce();
+ await screen.findByRole('link',{name:'Café Central'});
+ mocks.searchTerminals.mockImplementation(()=>new Promise(()=>{}));
+ mocks.user.id='otro-usuario';
+ try{
+  await user.click(screen.getByRole('button',{name:/^Filtros/u}));
+  expect(await screen.findByText('Cargando resultados…')).toBeInTheDocument();
+  expect(screen.queryByRole('link',{name:'Café Central'})).not.toBeInTheDocument();
+ }finally{mocks.user.id='1';}
 });

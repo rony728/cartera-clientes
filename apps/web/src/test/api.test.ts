@@ -64,3 +64,14 @@ describe('cliente API seguro', () => {
     expect(new Headers(upload.headers).get('X-CSRF-Token')).toBe('token-foto');
   });
 });
+
+it('envía visitas y variantes a PostgreSQL junto con la página, con días inclusivos en Honduras', () => {
+  const params=searchParams({q:'café',campo:'NombreComercial',pagina:3,limite:20,estado:'activas',orden:'ultima_visita',direccion:'desc',filtros:{Comunicacion:'GPRS'},variantes:{Comunicacion:['GPRS',' Gprs ']},visitas:'con',visita_antiguedad_meses:'2',visita_desde:'2026-08-01',visita_hasta:'2026-08-31'});
+  expect(params.get('visitas')).toBe('con');
+  expect(params.get('visita_antiguedad_meses')).toBe('2');
+  expect(params.get('visita_desde')).toBe('2026-08-01T00:00:00-06:00');
+  expect(params.get('visita_hasta')).toBe('2026-09-01T00:00:00-06:00');
+  expect(params.get('pagina')).toBe('3');
+  expect(params.get('orden')).toBe('ultima_visita');
+  expect(JSON.parse(params.get('filtros_variantes')!)).toEqual({Comunicacion:['GPRS',' Gprs ']});
+});
