@@ -180,7 +180,7 @@ test('expone opciones y nombres de campos dinámicos sin listas de valores codif
   const app = createApp({ apiKey:'key', databasePool:fakePool(), checkDatabaseFn:async()=>{}, sendMailFn:async()=>{}, terminalRepository, ...baseAppOptions('USUARIO') });
   const response = await request(app, { path:'/api/v1/terminales/filtros/opciones' });
   assert.equal(response.status, 200);
-  assert.deepEqual(response.body, { datos:{ Ciudad:['Tegucigalpa'] }, campos:['Ciudad','CampoNuevo'] });
+  assert.deepEqual(response.body, { datos:{ Ciudad:['Tegucigalpa'] }, campos:['Ciudad','CampoNuevo'], capacidades:{ filtros_variantes:true } });
 });
 
 test('edición exige versión, rechaza inactivas y expone conflictos sin sobrescribir', async () => {

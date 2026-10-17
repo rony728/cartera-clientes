@@ -3,6 +3,8 @@ export interface User { id: string; nombre: string; usuario: string; rol: Role; 
 export type ExcelData = Record<string, string | number | boolean | null>;
 export interface Terminal { terminal: string; activa: boolean; version: string | number; datos_excel: ExcelData; ultima_visita?: string | null; tiene_visitas_registradas?: boolean; ubicacion_interna?: string | null; referencia_interna?: string | null; fecha_actualizacion?: string; fecha_ultima_sincronizacion?: string }
 export interface Pagination { pagina: number; limite: number; total: number; total_paginas: number }
-export interface Page<T> { datos: T[]; paginacion: Pagination }
+export interface Page<T> { datos: T[]; paginacion: Pagination; filtros_variantes_aplicadas?: boolean }
 export interface HistoryEntry { id: string; campo: string; valor_anterior: unknown; valor_anterior_presente: boolean; valor_nuevo: unknown; valor_nuevo_presente: boolean; origen: 'PWA'|'EXCEL'|'SISTEMA'; fecha: string; responsable?: string; estado_excel?: string }
 export interface SearchState { q: string; campo: string; pagina: number; limite: number; estado: string; orden: string; direccion: 'asc'|'desc'; filtros: Record<string,string>; variantes?: Record<string,string[]>; visitas?: 'con'|'sin'; visita_antiguedad_meses?: '2'|'3'; visita_desde?: string; visita_hasta?: string }
+
+export interface FilterOptions { datos: Record<string,string[]>; campos: string[]; capacidades?: { filtros_variantes?: boolean } }

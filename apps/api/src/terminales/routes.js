@@ -74,7 +74,8 @@ function createTerminalesRouter({ pool, csrfProtection, sendMailFn, visitasEnabl
       ]);
       return res.status(200).json({
         datos: options,
-        campos: fields
+        campos: fields,
+        capacidades: { filtros_variantes: true }
       });
     } catch (error) { return handleError(res, error); }
   });
@@ -94,6 +95,7 @@ function createTerminalesRouter({ pool, csrfProtection, sendMailFn, visitasEnabl
       const result = await searchTerminales(pool, filters, visitasEnabled);
       return res.status(200).json({
         datos: result.datos,
+        ...(filters.variantes ? { filtros_variantes_aplicadas: true } : {}),
         paginacion: {
           pagina: filters.pagina,
           limite: filters.limite,

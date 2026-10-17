@@ -25,12 +25,12 @@ vi.mock('../Auth',()=>({useAuth:()=>({user:mocks.user,offline:mocks.offline})}))
 vi.mock('../api',()=>({api:mocks.api,searchTerminals:mocks.searchTerminals}));
 vi.mock('../offline',async(importOriginal)=>{
  const actual=await importOriginal<typeof import('../offline')>();
- return {...actual,downloadOffline:vi.fn(),getColumns:mocks.getColumns,getColumnWidths:mocks.getColumnWidths,offlineFilterOptions:vi.fn().mockResolvedValue({datos:{},campos:[]}),offlineMeta:vi.fn().mockResolvedValue(null),saveColumns:mocks.saveColumns,saveColumnWidths:mocks.saveColumnWidths,searchOffline:mocks.searchOffline};
+ return {...actual,downloadOffline:vi.fn(),getColumns:mocks.getColumns,getColumnWidths:mocks.getColumnWidths,offlineFilterOptions:vi.fn().mockResolvedValue({capacidades:{filtros_variantes:true},datos:{},campos:[]}),offlineMeta:vi.fn().mockResolvedValue(null),saveColumns:mocks.saveColumns,saveColumnWidths:mocks.saveColumnWidths,searchOffline:mocks.searchOffline};
 });
 vi.mock('../export',()=>({exportTerminals:mocks.exportTerminals}));
 
 const terminal:Terminal={terminal:'00001234',activa:true,version:'1',ubicacion_interna:'Pista',referencia_interna:'Frente a farmacia',datos_excel:{NombreComercial:'Café Central',SeriePOS:'SER-0007',Inventario:'INV-0042',Ciudad:'Danlí',CodigoComercio:'00077',Correo:'ana@example.com',Celular:'09990000',Atendio:'Ana López',SerieSimcard:'0000004567',RedSimcard:'Tigo'}};
-const page={datos:[terminal],paginacion:{pagina:1,limite:20,total:1,total_paginas:2}};
+const page={filtros_variantes_aplicadas:true,datos:[terminal],paginacion:{pagina:1,limite:20,total:1,total_paginas:2}};
 
 function renderCommerce(entry:InitialEntry='/comercios'){
  const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
@@ -50,7 +50,7 @@ function renderNavigation(entry:InitialEntry){
 describe('interfaz de Comercios',()=>{
  beforeEach(()=>{
   mocks.searchTerminals.mockReset().mockImplementation((state:SearchState)=>Promise.resolve({...page,paginacion:{...page.paginacion,pagina:state.pagina}}));
-  mocks.api.mockReset().mockResolvedValue({datos:{Ciudad:['Danlí'],Comunicacion:['GPRS',' Gprs ']},campos:['NombreComercial','SeriePOS','Inventario','Ciudad','Comunicacion','CampoDinamico']});
+  mocks.api.mockReset().mockResolvedValue({capacidades:{filtros_variantes:true},datos:{Ciudad:['Danlí'],Comunicacion:['GPRS',' Gprs ']},campos:['NombreComercial','SeriePOS','Inventario','Ciudad','Comunicacion','CampoDinamico']});
   mocks.searchOffline.mockReset().mockResolvedValue(page);
   mocks.writeText.mockReset().mockResolvedValue(undefined);
   mocks.getColumns.mockReset().mockResolvedValue(['Inventario','SeriePOS']);
@@ -249,7 +249,7 @@ describe('interfaz de Comercios',()=>{
  });
 
  it('ofrece limpiar búsqueda y quitar filtros en un estado vacío',async()=>{
-  mocks.searchTerminals.mockResolvedValue({datos:[],paginacion:{pagina:1,limite:20,total:0,total_paginas:0}});
+  mocks.searchTerminals.mockResolvedValue({capacidades:{filtros_variantes:true},datos:[],paginacion:{pagina:1,limite:20,total:0,total_paginas:0}});
   const user=userEvent.setup();
   renderCommerce('/comercios?q=inexistente&Ciudad=Danl%C3%AD');
   expect(await screen.findByRole('button',{name:'Quitar filtros'})).toBeInTheDocument();
@@ -300,7 +300,7 @@ describe('visitas en listado móvil y escritorio',()=>{
    {...terminal,terminal:'00002',datos_excel:{NombreComercial:'Sin visitas'},ultima_visita:null,tiene_visitas_registradas:false},
    {...terminal,terminal:'00003',datos_excel:{NombreComercial:'Solo siguiente mes'},ultima_visita:null,tiene_visitas_registradas:true}
   ]});
-  mocks.api.mockReset().mockResolvedValue({datos:{Comunicacion:['GPRS',' Gprs ']},campos:[]});
+  mocks.api.mockReset().mockResolvedValue({capacidades:{filtros_variantes:true},datos:{Comunicacion:['GPRS',' Gprs ']},campos:[]});
   mocks.getColumns.mockResolvedValue(['Inventario','SeriePOS']);
   mocks.getColumnWidths.mockResolvedValue({});
   mocks.saveColumnWidths.mockReset().mockResolvedValue(undefined);
@@ -384,7 +384,7 @@ describe('visitas en listado móvil y escritorio',()=>{
 
 it('no conserva resultados de otro usuario mientras carga su página',async()=>{
  mocks.user.id='1';mocks.offline=false;
- mocks.api.mockResolvedValue({datos:{},campos:[]});
+ mocks.api.mockResolvedValue({capacidades:{filtros_variantes:true},datos:{},campos:[]});
  mocks.searchTerminals.mockResolvedValue(page);
  const user=userEvent.setup();renderCommerce();
  await screen.findByRole('link',{name:'Café Central'});
@@ -395,4 +395,28 @@ it('no conserva resultados de otro usuario mientras carga su página',async()=>{
   expect(await screen.findByText('Cargando resultados…')).toBeInTheDocument();
   expect(screen.queryByRole('link',{name:'Café Central'})).not.toBeInTheDocument();
  }finally{mocks.user.id='1';}
+});
+
+
+it('rechaza variantes con API anterior sin mostrar una página incompleta y conserva la búsqueda',async()=>{
+ mocks.offline=false;mocks.user.id='1';
+ mocks.api.mockResolvedValue({datos:{Comunicacion:['GPRS',' Gprs ']},campos:[]});
+ mocks.searchTerminals.mockReset().mockResolvedValue(page);
+ const user=userEvent.setup();renderCommerce('/comercios?Comunicacion=GPRS&q=Caf%C3%A9');
+ expect(await screen.findByText(/La API aún no admite categorías equivalentes/u)).toBeInTheDocument();
+ expect(mocks.searchTerminals).not.toHaveBeenCalled();
+ await user.click(screen.getByRole('button',{name:'Consultar sin filtros'}));
+ expect(await screen.findByRole('link',{name:'Café Central'})).toBeInTheDocument();
+ expect(screen.getByRole('textbox',{name:'Buscar comercios'})).toHaveValue('Café');
+});
+
+
+it('rechaza una respuesta de API revertida aunque su capacidad siga cacheada',async()=>{
+ mocks.offline=false;mocks.user.id='1';
+ mocks.api.mockResolvedValue({capacidades:{filtros_variantes:true},datos:{Comunicacion:['GPRS',' Gprs ']},campos:[]});
+ mocks.searchTerminals.mockReset().mockResolvedValue({...page,filtros_variantes_aplicadas:undefined});
+ renderCommerce('/comercios?Comunicacion=GPRS');
+ expect(await screen.findByText(/La API aún no admite categorías equivalentes/u)).toBeInTheDocument();
+ expect(screen.queryByRole('link',{name:'Café Central'})).not.toBeInTheDocument();
+ expect(mocks.searchTerminals).toHaveBeenCalledTimes(1);
 });
