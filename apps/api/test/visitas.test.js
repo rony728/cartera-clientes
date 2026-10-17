@@ -90,3 +90,30 @@ test('filtros de visitas se validan y ordenamiento ocurre antes de OFFSET; no as
 test('fechas preservan microsegundos para resolver versiones sin empates artificiales', () => {
   assert.equal(fecha('2026-10-01T00:00:00.123456-06:00'), '2026-10-01T06:00:00.123456Z');
 });
+
+test('variantes equivalentes y visitas se filtran y ordenan en SQL antes de paginar', () => {
+  const { parseSearchParams } = require('../src/terminales/validation');
+  const { buildSearchQuery } = require('../src/terminales/queries');
+  const filters = parseSearchParams({ Comunicacion:'GPRS', filtros_variantes:JSON.stringify({Comunicacion:['GPRS',' Gprs ']}),visitas:'con',visita_antiguedad_meses:'2',orden:'ultima_visita',direccion:'desc',pagina:'3',limite:'20' });
+  const query=buildSearchQuery(filters,true);
+  assert.deepEqual(query.values.find(Array.isArray),['GPRS',' Gprs ']);
+  assert.match(query.text,/= ANY\(\$\d+::text\[\]\)/u);
+  assert.match(query.text,/DESC NULLS LAST, t.terminal ASC/u);
+  assert.ok(query.text.indexOf('uv.ultima_visita <') < query.text.indexOf('OFFSET'));
+  assert.ok(query.text.indexOf('= ANY') < query.text.indexOf('OFFSET'));
+  assert.deepEqual(query.values.slice(-2),[40,20]);
+  const malicious="'); DROP TABLE terminales; --";
+  const safe=buildSearchQuery(parseSearchParams({Zona:'Norte',filtros_variantes:JSON.stringify({Zona:[malicious]})}),true);
+  assert.ok(!safe.text.includes(malicious));
+  assert.ok(safe.values.some(value=>Array.isArray(value)&&value[0]===malicious));
+});
+
+test('variantes rechaza campos, estructuras y tamaños no autorizados sin romper filtros históricos', () => {
+  const { parseSearchParams } = require('../src/terminales/validation');
+  for (const value of ['null','[]','false','{',JSON.stringify({NoPermitido:['x']}),JSON.stringify({Zona:[]}),JSON.stringify({Zona:[null]}),JSON.stringify({Zona:['x'.repeat(201)]}),JSON.stringify({Zona:Array(251).fill('Norte')}),' '.repeat(32001)]) {
+    assert.throws(()=>parseSearchParams({Zona:'Norte',filtros_variantes:value}));
+  }
+  assert.throws(()=>parseSearchParams({filtros_variantes:JSON.stringify({Zona:['Norte']})}));
+  assert.throws(()=>parseSearchParams({Zona:'Norte',filtros_variantes:['{}','{}']}));
+  assert.equal(parseSearchParams({Zona:'Norte'}).variantes,undefined);
+});

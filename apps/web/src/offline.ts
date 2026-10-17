@@ -1,3 +1,4 @@
+import { compareVisitDates, matchesVisitFilters } from './visitas';
 import { openDB } from 'idb';
 import { searchTerminals } from './api';
 import { FILTER_FIELDS, INTERNAL_FIELDS } from './fields';
@@ -227,6 +228,8 @@ export async function searchOffline(userId: UserIdentifier, state: SearchState):
     !value || normalizeCategoryKey(excelValue(terminal.datos_excel, field)) === normalizeCategoryKey(value)
   )));
 
+  rows = rows.filter(terminal => matchesVisitFilters(terminal, state));
+
   const sortValue = (terminal: Terminal) => String(
     state.orden === 'Terminal'
       ? terminal.terminal
@@ -234,6 +237,7 @@ export async function searchOffline(userId: UserIdentifier, state: SearchState):
   );
   const direction = state.direccion === 'asc' ? 1 : -1;
   rows.sort((left, right) => {
+    if (state.orden === 'ultima_visita') return compareVisitDates(left,right,state.direccion) || collator.compare(left.terminal,right.terminal);
     const comparison = collator.compare(sortValue(left), sortValue(right));
     return comparison === 0
       ? collator.compare(left.terminal, right.terminal)

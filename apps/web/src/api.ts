@@ -1,3 +1,4 @@
+import { visitBoundary } from './visitas';
 import type { Page, SearchState, Terminal, User } from './types';
 
 export const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:3005').replace(/\/$/u, '');
@@ -83,6 +84,11 @@ export function searchParams(state: SearchState) {
   const params = new URLSearchParams({ campo: state.campo, pagina: String(state.pagina), limite: String(state.limite), estado: state.estado, orden: state.orden, direccion: state.direccion });
   if (state.q) params.set('q', state.q);
   Object.entries(state.filtros).forEach(([key,value]) => { if (value) params.set(key,value); });
+  if(state.variantes && Object.keys(state.variantes).length) params.set('filtros_variantes',JSON.stringify(state.variantes));
+  if(state.visitas) params.set('visitas',state.visitas);
+  if(state.visita_antiguedad_meses) params.set('visita_antiguedad_meses',state.visita_antiguedad_meses);
+  if(state.visita_desde) params.set('visita_desde',visitBoundary(state.visita_desde) || state.visita_desde);
+  if(state.visita_hasta) params.set('visita_hasta',visitBoundary(state.visita_hasta,true) || state.visita_hasta);
   return params;
 }
 export const searchTerminals = (state: SearchState, signal?: AbortSignal) => api<Page<Terminal>>(`/api/v1/terminales?${searchParams(state)}`, { signal });

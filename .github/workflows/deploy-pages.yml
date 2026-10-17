@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      api_revision:
+        description: 'SHA API verificado: esta revisión, o el mismo SHA del frontend de reversión'
+        required: true
+        type: string
+      frontend_revision:
+        description: 'SHA completo del frontend a publicar; vacío usa esta revisión (permite reversión)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -21,8 +30,25 @@ jobs:
       run:
         working-directory: apps/web
     steps:
+      - name: Validate coordinated release
+        working-directory: ${{ github.workspace }}
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          API_REVISION: ${{ inputs.api_revision }}
+          FRONTEND_REVISION: ${{ inputs.frontend_revision }}
+        run: |
+          [[ "$API_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          if [ -n "$FRONTEND_REVISION" ]; then
+            [[ "$FRONTEND_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          fi
+          test "$API_REVISION" = "$GITHUB_SHA" || {
+            test -n "$FRONTEND_REVISION" && test "$API_REVISION" = "$FRONTEND_REVISION"
+          }
+
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.frontend_revision || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -66,6 +92,7 @@ jobs:
           path: apps/web/dist
 
   deploy:
+    if: github.event_name == 'workflow_dispatch'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

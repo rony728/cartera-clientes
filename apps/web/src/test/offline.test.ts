@@ -294,3 +294,25 @@ describe('consulta offline', () => {
     clock.mockRestore();
   });
 });
+
+it('filtra visitas antes de paginar la copia local y conserva nulos al final', async()=>{
+  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-10-17T12:00:00Z'));
+  try{
+    await replaceOfflineTerminals('u1',[
+      {...rows[0],ultima_visita:'2026-07-31T23:59:59-06:00',tiene_visitas_registradas:true},
+      {...rows[1],ultima_visita:'2026-08-31T23:59:59-06:00',tiene_visitas_registradas:true},
+      {...rows[0],terminal:'00003',ultima_visita:null,tiene_visitas_registradas:false},
+      {...rows[0],terminal:'00004',ultima_visita:null,tiene_visitas_registradas:true}
+    ]);
+    const query={...baseState,orden:'ultima_visita',limite:1,visita_antiguedad_meses:'2' as const};
+    const first=await searchOffline('u1',query), second=await searchOffline('u1',{...query,pagina:2});
+    expect(first.paginacion).toEqual({pagina:1,limite:1,total:2,total_paginas:2});
+    expect(first.datos[0].terminal).toBe(rows[0].terminal);
+    expect(second.datos[0].terminal).toBe(rows[1].terminal);
+    expect((await searchOffline('u1',{...baseState,visitas:'sin'})).datos.map(t=>t.terminal)).toEqual(['00003']);
+    expect((await searchOffline('u1',{...baseState,visitas:'con'})).datos).toHaveLength(3);
+    expect((await searchOffline('u1',{...baseState,visita_antiguedad_meses:'3'})).datos).toHaveLength(1);
+    expect((await searchOffline('u1',{...baseState,visita_desde:'2026-08-01',visita_hasta:'2026-08-31'})).datos[0].terminal).toBe(rows[1].terminal);
+    expect((await searchOffline('u1',{...baseState,orden:'ultima_visita',direccion:'desc'})).datos.slice(0,2).map(t=>t.terminal)).toEqual([rows[1].terminal,rows[0].terminal]);
+  }finally{vi.useRealTimers();}
+});

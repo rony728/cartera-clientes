@@ -5,6 +5,7 @@ Requiere binarios PostgreSQL y extensión pg_trgm instalados; nunca instala paqu
 """
 from pathlib import Path
 import os
+import getpass
 import subprocess
 import sys
 import tempfile
@@ -24,7 +25,12 @@ with tempfile.TemporaryDirectory(prefix='cartera-visitas-test-') as root:
         started = True
         run([str(binary / 'createdb'), '-h', root, 'cartera_visitas_test'])
         env = {**os.environ, 'TEST_DATABASE_NAME': 'cartera_visitas_test',
-               'TEST_DATABASE_URL': 'postgresql:///cartera_visitas_test?host=' + root}
+               'TEST_DATABASE_URL': 'postgresql:///cartera_visitas_test?host=' + root,
+               'DB_HOST': root, 'DB_PORT': '5432', 'DB_NAME': 'cartera_visitas_test',
+               'DB_USER': getpass.getuser(), 'DB_PASSWORD': '',
+               'PGHOST': root, 'PGPORT': '5432', 'PGDATABASE': 'cartera_visitas_test',
+               'PGUSER': getpass.getuser(), 'PGPASSWORD': '',
+               'PGOPTIONS': '-c statement_timeout=30000'}
         run(['npm', 'run', 'test:db:setup'], env=env)
         run(['npm', 'run', 'test:integration'], env=env)
     finally:

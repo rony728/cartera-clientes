@@ -282,7 +282,7 @@ test('roles mínimos pueden consultar/importar pero no leer JSON privado ni borr
 
 test('rendimiento y cardinalidad con 100 mil filas fuente: agregado único, búsqueda y páginas sin duplicados', async (t) => {
   await pool.query(`INSERT INTO public.terminales(terminal,datos_excel,activa)
-    SELECT lpad(n::text,5,'0'),jsonb_build_object('NombreComercial','Comercio '||n),true FROM generate_series(1,1000) n`);
+    SELECT lpad(n::text,5,'0'),jsonb_build_object('NombreComercial','Comercio '||n,'Comunicacion',CASE WHEN n%2=0 THEN 'GPRS' ELSE ' Gprs ' END),true FROM generate_series(1,1000) n`);
   const attempt = await pool.query("INSERT INTO public.importaciones_visitas(resultado) VALUES('COMPLETADA') RETURNING id");
   await pool.query({ text: `INSERT INTO public.visitas_fuentes
     (fuente,id,terminal,fecha,tecnico,tipo_visita,modificado,recibido,datos,importacion_id)
@@ -294,15 +294,17 @@ test('rendimiento y cardinalidad con 100 mil filas fuente: agregado único, bús
   await pool.query('ANALYZE public.visitas_fuentes; ANALYZE public.visitas_actuales; ANALYZE public.terminales');
   const { buildSearchQuery } = require('../../src/terminales/queries');
   const timings = {};
-  for (const [name, params] of [['listado',{}], ['busqueda',{ q:'00001', campo:'terminal' }], ['antiguedad',{ visita_antiguedad_meses:'2', orden:'ultima_visita' }]]) {
-    for (const enabled of (name === 'antiguedad' ? [true] : [false,true])) {
+  for (const [name, params] of [['listado',{}], ['busqueda',{ q:'00001', campo:'terminal' }], ['antiguedad',{ visita_antiguedad_meses:'2', orden:'ultima_visita' }], ['variantes_orden',{Comunicacion:'GPRS',filtros_variantes:JSON.stringify({Comunicacion:['GPRS',' Gprs ']}),orden:'ultima_visita',direccion:'desc'}], ['variantes_2meses',{Comunicacion:'GPRS',filtros_variantes:JSON.stringify({Comunicacion:['GPRS',' Gprs ']}),visita_antiguedad_meses:'2',orden:'ultima_visita',pagina:'3'}], ['variantes_rango',{Comunicacion:'GPRS',filtros_variantes:JSON.stringify({Comunicacion:['GPRS',' Gprs ']}),visita_desde:'2026-01-01T00:00:00-06:00',visita_hasta:'2026-11-01T00:00:00-06:00',orden:'ultima_visita'}]]) {
+    for (const enabled of (name === 'antiguedad'||name.startsWith('variantes') ? [true] : [false,true])) {
       const query = buildSearchQuery(parseSearchParams(params),enabled);
       const explain = await pool.query({ text:'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '+query.text, values:query.values });
       const plan = explain.rows[0]['QUERY PLAN'][0];
       timings[name+(enabled ? '_visitas_ms' : '_base_ms')] = plan['Execution Time'];
+      assert.ok(plan['Execution Time']<2000, 'Consulta sintética excedió 2 s: '+name);
       const nodes = [];
       const walk = (node) => { nodes.push(node); (node.Plans || []).forEach(walk); };
       walk(plan.Plan);
+      assert.ok(nodes.every(node => node['Sort Space Type'] !== 'Disk' && !(node['Disk Usage'] > 0)), 'No debe derramar a disco con este volumen');
       assert.ok(nodes.filter((node) => /Aggregate/u.test(node['Node Type'])).every((node) => node['Actual Loops'] <= 1));
     }
   }
@@ -335,4 +337,65 @@ test('fallo al mantener la proyección canónica revierte también fuentes y est
     assert.equal((await pool.query('SELECT count(*)::int AS n FROM public.visitas_fuentes')).rows[0].n,1);
     assert.equal((await pool.query("SELECT cantidad FROM public.visitas_reportes WHERE fuente='historico'")).rows[0].cantidad,1);
   } finally { await pool.query('DROP TRIGGER fail_projection ON public.visitas_actuales; DROP FUNCTION public.fail_projection_test()'); }
+});
+
+test('variantes SQL combinadas con visitas mantienen totales, orden, páginas y búsquedas anteriores', async () => {
+  const names=['Alfa','Beta','Gamma','Delta','Epsilon','Zeta','Eta','Literal'];
+  const communications=['GPRS',' Gprs ','GPRS','WIFI','GPRS',' Gprs ','GPRS',"'); DROP TABLE terminales; --"];
+  for(let index=0;index<names.length;index++){
+    await pool.query('INSERT INTO public.terminales(terminal,datos_excel,activa) VALUES($1,$2,true)',[
+      String(index+1).padStart(5,'0'),JSON.stringify({NombreComercial:names[index],Comunicacion:communications[index],Zona:index===2?'Sur':index===1?' Norte ':'Norte'})
+    ]);
+  }
+  const dates={1:'2026-08-31T23:59:59-06:00',2:'2026-07-31T23:59:59-06:00',3:'2026-10-31T23:59:59-06:00',4:'2026-07-01T00:00:00-06:00',6:'2026-11-01T00:00:00-06:00',7:'2026-09-01T00:00:00-06:00',8:'2026-08-01T00:00:00-06:00'};
+  await run(make(Object.entries(dates).map(([id,Fecha])=>({...BASE,ID:Number(id),Terminal:id.padStart(5,'0'),Fecha}))),make([]));
+  const db=fixedPool('2026-10-17T12:00:00Z');
+  const variants={Comunicacion:['GPRS',' Gprs '],Zona:['Norte',' Norte ']};
+  const query={Comunicacion:'GPRS',Zona:'Norte',filtros_variantes:JSON.stringify(variants)};
+  const list=parameters=>searchTerminales(db,parseSearchParams(parameters),true);
+  const first=await list({...query,visita_antiguedad_meses:'2',orden:'ultima_visita',direccion:'desc',limite:'1'});
+  const second=await list({...query,visita_antiguedad_meses:'2',orden:'ultima_visita',direccion:'desc',limite:'1',pagina:'2'});
+  assert.equal(first.total,2);assert.equal(second.total,2);
+  assert.deepEqual([...first.datos,...second.datos].map(row=>row.terminal),['00001','00002']);
+  assert.deepEqual((await list({...query,visita_antiguedad_meses:'3',orden:'ultima_visita'})).datos.map(row=>row.terminal),['00002']);
+  assert.deepEqual((await list({...query,visita_desde:'2026-07-01T00:00:00-06:00',visita_hasta:'2026-09-01T00:00:00-06:00',orden:'ultima_visita'})).datos.map(row=>row.terminal),['00002','00001']);
+  assert.equal((await list({...query,visitas:'con'})).total,4);
+  assert.deepEqual((await list({...query,visitas:'sin'})).datos.map(row=>row.terminal),['00005']);
+  const all=await list({...query,orden:'ultima_visita',direccion:'desc'});
+  assert.deepEqual(all.datos.map(row=>row.terminal),['00007','00001','00002','00005','00006']);
+  assert.equal(all.datos[3].ultima_visita,null);assert.equal(all.datos[3].tiene_visitas_registradas,false);
+  assert.equal(all.datos[4].ultima_visita,null);assert.equal(all.datos[4].tiene_visitas_registradas,true);
+  const oldParams=parseSearchParams({Comunicacion:'GPRS',Zona:'Norte',q:'Al',campo:'NombreComercial',orden:'Terminal'});
+  for(const enabled of [false,true]){
+    const old=await searchTerminales(db,oldParams,enabled);
+    assert.equal(old.total,1);assert.equal(old.datos[0].terminal,'00001');
+  }
+  const literal=await list({Comunicacion:communications[7],filtros_variantes:JSON.stringify({Comunicacion:[communications[7]]})});
+  assert.equal(literal.total,1);assert.equal(literal.datos[0].terminal,'00008');
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM public.terminales')).rows[0].n,8);
+  const app=createApp({apiKey:'test',databasePool:db,visitasEnabled:true,...baseAppOptions('TECNICO')});
+  const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
+  try{
+    const base=`http://127.0.0.1:${server.address().port}`;
+    const options=await (await fetch(base+'/api/v1/terminales/filtros/opciones')).json();
+    assert.equal(options.capacidades.filtros_variantes,true);
+    const response=await fetch(base+'/api/v1/terminales?'+new URLSearchParams({...query,visita_antiguedad_meses:'2',orden:'ultima_visita',direccion:'desc',limite:'1',pagina:'2'}));
+    assert.equal(response.status,200);
+    const body=await response.json();assert.equal(body.filtros_variantes_aplicadas,true);assert.equal(body.paginacion.total,2);assert.equal(body.datos[0].terminal,'00002');
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});
+
+test('filtros 2/3 meses y MAX en enero respetan medianoche de Honduras y futuro dentro del mes', async()=>{
+  await pool.query(`INSERT INTO public.terminales(terminal,datos_excel,activa)
+    SELECT lpad(n::text,5,'0'),'{}',true FROM generate_series(1,5) n`);
+  const dates=['2026-11-30T23:59:59-06:00','2026-10-31T23:59:59-06:00','2026-12-01T00:00:00-06:00','2027-01-31T23:59:59-06:00','2027-02-01T00:00:00-06:00'];
+  await run(make(dates.map((Fecha,i)=>({...BASE,ID:i+1,Terminal:String(i+1).padStart(5,'0'),Fecha}))),make([]));
+  const list=(instant,q)=>searchTerminales(fixedPool(instant),parseSearchParams({orden:'Terminal',...q}),true);
+  const january='2027-01-01T06:00:00Z';
+  assert.deepEqual((await list(january,{visita_antiguedad_meses:'2'})).datos.map(row=>row.terminal),['00001','00002']);
+  assert.deepEqual((await list(january,{visita_antiguedad_meses:'3'})).datos.map(row=>row.terminal),['00002']);
+  assert.deepEqual((await list('2027-01-01T05:59:59Z',{visita_antiguedad_meses:'2'})).datos.map(row=>row.terminal),['00002']);
+  const all=await list(january,{});
+  assert.equal(all.datos[3].ultima_visita.toISOString(),'2027-02-01T05:59:59.000Z');
+  assert.equal(all.datos[4].ultima_visita,null);assert.equal(all.datos[4].tiene_visitas_registradas,true);
 });

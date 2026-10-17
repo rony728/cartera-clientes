@@ -72,6 +72,26 @@ function parseSearchParams(query) {
     }
   }
 
+  // Unión de categorías equivalentes en SQL, antes de la paginación.
+  const variantes = {};
+  const rawVariantes = getSingleQueryValue(query.filtros_variantes, 'filtros_variantes');
+  if (rawVariantes !== undefined) {
+    let parsed;
+    try {
+      if (rawVariantes.length > 32000) throw new Error();
+      parsed = JSON.parse(rawVariantes);
+    } catch (_) { throw new ValidationError('Las variantes de filtros no son válidas.'); }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new ValidationError('Las variantes de filtros no son válidas.');
+    for (const [field, values] of Object.entries(parsed)) {
+      if (!FILTER_FIELDS.includes(field) || !filtros[field] || !Array.isArray(values)
+          || values.length === 0 || values.length > 250
+          || values.some(value => typeof value !== 'string' || !value.trim() || value.length > 200)) {
+        throw new ValidationError('Las variantes de filtros no son válidas.');
+      }
+      variantes[field] = [...new Set(values)];
+    }
+  }
+
   const visitas = {};
   const presencia = getSingleQueryValue(query.visitas, 'visitas');
   if (presencia !== undefined) {
@@ -103,6 +123,7 @@ function parseSearchParams(query) {
     orden,
     direccion,
     filtros,
+    ...(Object.keys(variantes).length ? { variantes } : {}),
     ...(Object.keys(visitas).length ? { visitas } : {})
   };
 }
